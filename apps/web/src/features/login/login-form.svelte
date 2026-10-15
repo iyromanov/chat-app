@@ -58,6 +58,7 @@
   <div class="flex flex-col gap-2">
     <Label for="email" color={fields.email ? 'red' : 'gray'}>Email</Label>
     <Input
+      class="text-base sm:text-sm"
       id="email"
       type="email"
       autocomplete="email"
@@ -79,6 +80,7 @@
       >Password</Label
     >
     <Input
+      class="text-base sm:text-sm"
       id="password"
       type="password"
       autocomplete="current-password"

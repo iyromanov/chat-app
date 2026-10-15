@@ -53,7 +53,7 @@
         onkeydown={keydown}
         oninput={(event) => resize(event.currentTarget)}
         classes={{ div: 'min-w-0 flex-1' }}
-        class="block w-full max-h-40 min-h-11 resize-none rounded-2xl border-gray-200 bg-white px-4 py-3 text-sm leading-5 focus:border-blue-500 focus:ring-blue-500"
+        class="block w-full max-h-40 min-h-11 resize-none rounded-2xl border-gray-200 bg-white px-4 py-3 text-base leading-5 sm:text-sm focus:border-blue-500 focus:ring-blue-500"
       />
     {/key}
     <Button

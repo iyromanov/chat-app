@@ -27,7 +27,7 @@
         onclick={() => onSelect(conversation.id)}
         aria-current={selectedId === conversation.id ? 'true' : undefined}
         class={[
-          'w-full justify-start gap-3 rounded-none border-0 px-4 py-3 text-left shadow-none focus-visible:ring-inset',
+          'w-full justify-start gap-3 rounded-none border-0 px-4 py-3 text-left shadow-none focus-within:ring-0 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500',
           selectedId === conversation.id
             ? 'bg-blue-50 hover:bg-blue-50'
             : 'bg-white hover:bg-gray-50',

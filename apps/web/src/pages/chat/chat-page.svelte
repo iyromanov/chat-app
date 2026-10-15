@@ -65,6 +65,7 @@
   }
   function closeSearch() {
     searchActive = false;
+    users.change('');
     view = 'list';
     searchInput?.blur();
   }
@@ -212,7 +213,7 @@
           oninput={(event) =>
             users.change((event.currentTarget as HTMLInputElement).value)}
           placeholder="Search users"
-          class="rounded-xl border-0 bg-gray-100 py-2.5 pl-10 pr-9 text-sm focus:ring-blue-500"
+          class="rounded-xl border-0 bg-gray-100 py-2.5 pl-10 pr-9 text-base sm:text-sm focus:ring-blue-500"
         />
         {#if searchActive}<Button
             color="alternative"
