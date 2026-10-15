@@ -1,5 +1,7 @@
 import { io, type Socket } from 'socket.io-client';
 import { type ServerEvents, type CurrentUser } from '@chat/contracts';
+import { createMessages } from '@entities/message';
+import { messageSchema, type Message } from '@chat/contracts';
 import { createConversations } from '@entities/conversation';
 import { conversationSchema } from '@chat/contracts';
 import { createApi, readAuthDeadline, ApiError } from '@shared/api';
@@ -21,12 +23,18 @@ class Auth {
     this.socket?.disconnect();
     this.socket = undefined;
     this.conversations.clear();
+    this.messages.clear();
     this.state = { status: 'anonymous', user: null };
   };
 
   readonly api = createApi({ onUnauthorized: this.anonymous });
 
   readonly conversations = createConversations(this.api);
+  readonly messages = createMessages(this.api);
+  messageSaved = (message: Message) => {
+    this.messages.upsert(message);
+    this.conversations.applyMessage(message);
+  };
 
   registered = (user: CurrentUser, expiresAt: number) => {
     this.anonymous();
@@ -42,8 +50,16 @@ class Auth {
       const parsed = conversationSchema.safeParse(data);
       if (parsed.success) this.conversations.upsert(parsed.data);
     });
+    this.socket.on('message:created', (data) => {
+      if (generation !== this.generation) return;
+      const parsed = messageSchema.safeParse(data);
+      if (parsed.success) this.messageSaved(parsed.data);
+    });
     this.socket.on('connect', () => {
-      if (generation === this.generation) void this.conversations.load();
+      if (generation === this.generation) {
+        void this.conversations.load();
+        void this.messages.load();
+      }
     });
     void this.conversations.load();
     this.socket.on('auth:ended', () => {
@@ -80,6 +96,7 @@ class Auth {
     ) {
       void this.api.AuthController_me().catch(() => {});
       void this.conversations.load();
+      void this.messages.load();
     }
   };
 

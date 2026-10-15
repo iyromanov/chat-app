@@ -1,6 +1,6 @@
 # Чат
 
-Реализованы регистрация, вход, восстановление авторизации и выход во всех вкладках текущего браузера. Интерфейс на английском. Переписка добавляется следующими задачами.
+Реализованы регистрация, вход, восстановление авторизации и выход во всех вкладках текущего браузера. Интерфейс на английском. Доступны поиск собеседников, личные диалоги и сохранённая текстовая переписка с доставкой во все вкладки участников.
 
 ## Минимальный запуск
 
@@ -81,3 +81,14 @@ Successful registration, login and restoration responses include the documented 
 5. With more than 50 other users or conversations, scroll down to load the next page automatically. “Load more” also supports keyboard activation. Change the search during loading and confirm only results for the latest search remain.
 
 HTTP/Socket.io integration coverage runs against Testcontainers MongoDB via `pnpm test`; it covers search, 50-item pages, invalid and query-bound cursors, tied conversation timestamps, repeated/concurrent starts, participant lists, and event delivery to all participant tabs. Browser acceptance remains a separate manual check.
+
+### Send messages and read saved history
+
+1. Open a conversation in two independent sessions, with an extra tab for each participant. Send text with internal line breaks; all participant tabs receive the same saved message without reloading. A third user cannot read or send into this conversation.
+2. The composer rejects whitespace-only text and more than 2000 characters after trimming. Submit the boundary of 2000 characters, and check clear validation errors. Sending is confirmed only when the server returns the saved message. Repeating an unsuccessful request with unchanged text keeps its attempt ID; editing the text starts a new attempt.
+3. Send more than 50 messages. Reload and open the conversation: the latest 50 appear oldest first. Click “Load more” to add older messages, checking the boundary for omissions and duplicates. Sign out and back in to verify persistence.
+4. Send into an older conversation. Its preview and timestamp update, and it moves to the top in both participants' tabs. Reopening a conversation preserves its last-message preview. Check at 375 px that long words, line breaks, errors and controls remain usable.
+
+`POST /api/conversations/{conversationId}/messages` accepts `text` and `attemptId`. The unique conversation/sender/attempt index protects concurrent retries; a retry with different normalized text returns `409 MESSAGE_ATTEMPT_CONFLICT`. `GET` on the same route returns 50 messages with a scoped `nextCursor` for older history. The `message:created` Socket.io event carries the same public message as HTTP, after saving. Stores merge by message ID; app links message events to the independent message and conversation stores. Latest conversation activity is derived from an indexed Message lookup, without storing a message copy in Conversation or using a multi-document transaction.
+
+The message HTTP/Socket.io tests cover trimming, line breaks, length boundaries, persistence after login, participant access, unique concurrent attempts, text conflicts, tied timestamp pagination and cursor scope, activity ordering, and delivery to every participant tab while excluding outsiders. Full missed-message recovery and connection status belong to ticket 05; browser acceptance is tracked separately in ticket 04.

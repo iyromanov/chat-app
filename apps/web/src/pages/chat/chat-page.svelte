@@ -13,6 +13,9 @@
   import type { Conversation } from '@chat/contracts';
   import type { ApiClient } from '@shared/api';
   import { InfiniteScroll } from '@shared/ui';
+  import { MessageHistory } from '@widgets/message-history';
+  import type { MessageStore } from '@entities/message';
+  import type { Message } from '@chat/contracts';
   import { ConversationsWidget } from '@widgets/conversations';
   import type { ConversationStore } from '@entities/conversation';
   import { createUserSearch } from '@features/find-users';
@@ -20,12 +23,28 @@
   let {
     api,
     conversations,
-  }: { api: ApiClient; conversations: ConversationStore } = $props();
+    messages,
+    userId,
+    onSent,
+  }: {
+    api: ApiClient;
+    conversations: ConversationStore;
+    messages: MessageStore;
+    userId: string;
+    onSent: (message: Message) => void;
+  } = $props();
   const users = createUserSearch(() => api);
   let selectedId = $state<string | null>(null);
   function started(conversation: Conversation) {
     conversations.upsert(conversation);
-    selectedId = conversation.id;
+    select(conversation.id);
+  }
+  let selected = $derived(
+    conversations.items.find((item) => item.id === selectedId),
+  );
+  function select(id: string) {
+    selectedId = id;
+    messages.open(id);
   }
   onMount(() => {
     void users.load();
@@ -67,5 +86,14 @@
         onLoad={() => void users.load(true)}
       />{/if}
   </section>
-  <ConversationsWidget {conversations} bind:selectedId />
+  <section class="flex min-w-0 flex-col gap-6">
+    <ConversationsWidget {conversations} {selectedId} onSelect={select} />
+    {#if selected}<MessageHistory
+        {messages}
+        conversation={selected}
+        {api}
+        {onSent}
+        {userId}
+      />{/if}
+  </section>
 </div>

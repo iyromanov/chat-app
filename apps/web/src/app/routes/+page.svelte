@@ -73,6 +73,9 @@
     {#key auth.state.user.id}<ChatPage
         api={auth.api}
         conversations={auth.conversations}
+        messages={auth.messages}
+        userId={auth.state.user.id}
+        onSent={auth.messageSaved}
       />{/key}
   </main>
 {:else if registering}

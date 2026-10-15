@@ -1,3 +1,4 @@
+import { MessagesDataModule } from '../messages/messages-data.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
@@ -9,6 +10,7 @@ import { ConversationsController } from './conversations.controller';
 @Module({
   imports: [
     RealtimeModule,
+    MessagesDataModule,
     UsersModule,
     MongooseModule.forFeature([
       { name: Conversation.name, schema: conversationSchema },

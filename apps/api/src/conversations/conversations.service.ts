@@ -41,7 +41,10 @@ export class ConversationsService {
       userId,
       otherId,
     );
-    const response = presentConversation(conversation, counterpart);
+    const response = presentConversation(
+      await this.conversations.withActivity(conversation),
+      counterpart,
+    );
     if (created) {
       this.userSockets.emitToUser(userId, 'conversation:created', response);
       this.userSockets.emitToUser(
@@ -62,9 +65,12 @@ export class ConversationsService {
         this.conversations.listForParticipant(
           userId,
           limit,
-          after ? { createdAt: new Date(after.key), id: after.id } : undefined,
+          after ? { activityAt: new Date(after.key), id: after.id } : undefined,
         ),
-      position: (row) => ({ key: row.createdAt.toISOString(), id: row.id }),
+      position: (row) => ({
+        key: (row.activityAt ?? row.createdAt).toISOString(),
+        id: row.id,
+      }),
     });
     const users = await this.loadUsers(
       page.items.flatMap((row) => row.participants),

@@ -100,6 +100,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/conversations/{conversationId}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["MessagesController_list"];
+        put?: never;
+        post: operations["MessagesController_send"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -146,7 +162,15 @@ export interface components {
             };
             /** Format: date-time */
             createdAt: string;
-            lastMessage: null;
+            lastMessage: {
+                id: string;
+                conversationId: string;
+                senderId: string;
+                text: string;
+                attemptId: string;
+                /** Format: date-time */
+                createdAt: string;
+            } | null;
         };
         ConversationsPageDto: {
             items: {
@@ -157,7 +181,40 @@ export interface components {
                 };
                 /** Format: date-time */
                 createdAt: string;
-                lastMessage: null;
+                lastMessage: {
+                    id: string;
+                    conversationId: string;
+                    senderId: string;
+                    text: string;
+                    attemptId: string;
+                    /** Format: date-time */
+                    createdAt: string;
+                } | null;
+            }[];
+            nextCursor: string | null;
+        };
+        SendMessageDto: {
+            text: string;
+            attemptId: string;
+        };
+        MessageDto: {
+            id: string;
+            conversationId: string;
+            senderId: string;
+            text: string;
+            attemptId: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        MessagesPageDto: {
+            items: {
+                id: string;
+                conversationId: string;
+                senderId: string;
+                text: string;
+                attemptId: string;
+                /** Format: date-time */
+                createdAt: string;
             }[];
             nextCursor: string | null;
         };
@@ -419,6 +476,110 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+        };
+    };
+    MessagesController_list: {
+        parameters: {
+            query?: {
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                conversationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessagesPageDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+        };
+    };
+    MessagesController_send: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendMessageDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -12,6 +12,6 @@ export function presentConversation(
     id: conversation.id,
     counterpart,
     createdAt: conversation.createdAt.toISOString(),
-    lastMessage: null,
+    lastMessage: conversation.lastMessage ?? null,
   };
 }
