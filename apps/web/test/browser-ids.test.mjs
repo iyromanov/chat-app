@@ -70,8 +70,10 @@ test('sending and logout work without crypto.randomUUID', async () => {
     const { createAuth } = await server.ssrLoadModule(
       '/src/app/auth/auth.svelte.ts',
     );
-    const auth = createAuth();
-    auth.api.AuthController_logout = async () => ({});
+    const auth = createAuth(
+      () => ({ AuthController_logout: async () => ({}) }),
+      () => {},
+    );
     await auth.logout();
     assert.equal(auth.state.status, 'anonymous');
     const firstLogout = storage.get('chat:logout');

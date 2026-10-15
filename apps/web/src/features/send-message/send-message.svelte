@@ -19,20 +19,20 @@
     const text = draft.text;
     const element = textarea;
     if (element)
-      void tick().then(() => {
+      tick().then(() => {
         if (element.value === text) resize(element);
       });
   });
 
   function submit(event: SubmitEvent) {
     event.preventDefault();
-    void composer.send(conversationId);
+    composer.send(conversationId);
   }
 
   function keydown(event: KeyboardEvent) {
     if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
       event.preventDefault();
-      void composer.send(conversationId);
+      composer.send(conversationId);
     }
   }
 </script>

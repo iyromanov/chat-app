@@ -39,7 +39,7 @@ class Conversations {
       (item) => item.id === message.conversationId,
     );
     if (conversation) this.upsert({ ...conversation, lastMessage: message });
-    else void this.load();
+    else this.load();
   };
 
   clear = () => {
@@ -75,7 +75,7 @@ class Conversations {
         this.loading = false;
         if (this.refreshPending) {
           this.refreshPending = false;
-          void this.load();
+          this.load();
         }
       }
     }

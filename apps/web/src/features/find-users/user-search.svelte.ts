@@ -18,7 +18,7 @@ class UserSearch {
     this.items = [];
     this.nextCursor = null;
     this.loading = false;
-    void this.load();
+    this.load();
   };
 
   dispose = () => {

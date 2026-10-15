@@ -47,8 +47,8 @@ export class AuthGateway implements OnGatewayInit {
 
   handleConnection(socket: Socket) {
     const { loginId, expiresAt } = socket.data.auth as AuthRequest['auth'];
-    void socket.join(roomKeys.login(loginId));
-    void this.userSockets.joinUser(socket, socket.data.userId as string);
+    socket.join(roomKeys.login(loginId));
+    this.userSockets.joinUser(socket, socket.data.userId as string);
     socket.emit('auth:ready', { expiresAt: expiresAt.toISOString() });
     const cancel = this.clock.scheduleAt(expiresAt, () => {
       socket.emit('auth:ended');

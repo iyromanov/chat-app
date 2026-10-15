@@ -28,7 +28,7 @@ class Messages {
     if (this.conversationId === conversationId) return;
     this.clear();
     this.conversationId = conversationId;
-    void this.load();
+    this.load();
   };
 
   clear = () => {
@@ -70,7 +70,7 @@ class Messages {
         this.loading = false;
         if (this.refreshPending) {
           this.refreshPending = false;
-          void this.load();
+          this.load();
         }
       }
     }

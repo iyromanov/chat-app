@@ -14,4 +14,4 @@ async function main() {
   });
   await app.listen(config.PORT, '0.0.0.0');
 }
-void main();
+main();

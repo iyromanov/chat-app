@@ -184,6 +184,9 @@ importers:
       flowbite:
         specifier: ^3.1.2
         version: 3.1.2(rollup@4.64.6)
+      socket.io:
+        specifier: ^4.8.4
+        version: 4.8.4
       svelte:
         specifier: ^5.39.0
         version: 5.57.2(@typescript-eslint/types@8.71.2)

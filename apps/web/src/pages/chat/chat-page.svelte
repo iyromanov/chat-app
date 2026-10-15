@@ -63,8 +63,8 @@
     searchActive = true;
     view = 'search';
     menuOpen = false;
-    if (!users.items.length && !users.loading) void users.load();
-    void tick().then(() => searchInput?.focus());
+    if (!users.items.length && !users.loading) users.load();
+    tick().then(() => searchInput?.focus());
   }
 
   function closeSearch() {
@@ -274,7 +274,7 @@
             {users.search ? 'No users found' : 'No other users yet'}
           </p>
         {:else if users.nextCursor}<InfiniteScroll
-            onLoad={() => void users.load(true)}
+            onLoad={() => users.load(true)}
           />{/if}
       </div>
     </section>

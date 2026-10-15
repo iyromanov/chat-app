@@ -9,6 +9,7 @@
     type MessageComposerStore,
   } from '@features/send-message';
   import { Icon } from '@shared/ui';
+  import { formatTime } from '@shared/lib';
   let {
     messages,
     conversation,
@@ -77,7 +78,7 @@
       previousLast = last?.id ?? '';
       if (changed && !shouldScroll) showNew = true;
       if (shouldScroll)
-        void tick().then(() => {
+        tick().then(() => {
           if (generation === scrollGeneration && !loading) bottom();
         });
     });
@@ -161,10 +162,7 @@
               class="mt-1 block text-right text-[10px] leading-4 text-gray-500"
               datetime={message.createdAt}
               title={new Date(message.createdAt).toLocaleString()}
-              >{new Date(message.createdAt).toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit',
-              })}</time
+              >{formatTime(message.createdAt)}</time
             >
           </div>
         </li>

@@ -37,4 +37,4 @@ async function main() {
   writeFileSync('openapi.json', JSON.stringify(openApi(app), null, 2) + '\n');
   await app.close();
 }
-void main();
+main();

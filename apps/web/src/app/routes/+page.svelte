@@ -5,14 +5,16 @@
   import { LoginPage } from '@pages/login';
   import { RegisterPage } from '@pages/register';
   import { Alert, Button, P, Spinner } from 'flowbite-svelte';
-  import { createAuth } from '../auth';
-  const auth = createAuth();
+  import { createAppRuntime } from '../runtime';
+  const runtime = createAppRuntime();
+  const auth = runtime.auth;
   let registering = $state(false);
   let logoutError = $state('');
 
   function signedIn(user: CurrentUser, expiresAt: number) {
     registering = false;
-    auth.registered(user, expiresAt);
+    logoutError = '';
+    auth.signedIn(user, expiresAt);
   }
 
   async function logout() {
@@ -25,13 +27,13 @@
   }
 
   onMount(() => {
-    void auth.restore();
-    return auth.dispose;
+    auth.restore();
+    return runtime.dispose;
   });
 </script>
 
 <svelte:window onstorage={auth.storageChanged} />
-<svelte:document onvisibilitychange={auth.visibilityChanged} />
+<svelte:document onvisibilitychange={runtime.visibilityChanged} />
 
 <svelte:head
   ><title>Chat</title><meta
@@ -53,27 +55,28 @@
       <Button onclick={auth.restore}>Try again</Button>
     </div>
   </main>
-{:else if auth.state.status === 'authenticated'}
+{:else if auth.state.status === 'authenticated' && runtime.context}
+  {@const context = runtime.context}
   <main>
-    {#key auth.state.user.id}<ChatPage
-        api={auth.api}
-        conversations={auth.conversations}
-        messages={auth.messages}
+    {#key context}<ChatPage
+        api={context.api}
+        conversations={context.chat.conversations}
+        messages={context.chat.messages}
         userId={auth.state.user.id}
-        onSent={auth.messageSaved}
+        onSent={context.chat.messageSaved}
         onLogout={logout}
         {logoutError}
       />{/key}
   </main>
 {:else if registering}
   <RegisterPage
-    api={auth.api}
+    api={runtime.api}
     onRegistered={signedIn}
     onSignIn={() => (registering = false)}
   />
 {:else}
   <LoginPage
-    api={auth.api}
+    api={runtime.api}
     onLoggedIn={signedIn}
     onRegister={() => (registering = true)}
   />

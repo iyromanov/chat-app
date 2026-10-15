@@ -3,6 +3,7 @@
   import type { ConversationStore } from '@entities/conversation';
   import { UserAvatar } from '@entities/user';
   import { InfiniteScroll } from '@shared/ui';
+  import { formatTime } from '@shared/lib';
   let {
     conversations,
     selectedId,
@@ -43,12 +44,9 @@
               class="shrink-0 text-[11px] font-normal text-gray-500"
               datetime={conversation.lastMessage?.createdAt ??
                 conversation.createdAt}
-              >{new Date(
+              >{formatTime(
                 conversation.lastMessage?.createdAt ?? conversation.createdAt,
-              ).toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit',
-              })}</time
+              )}</time
             >
           </span>
           <span class="mt-1 block truncate text-xs font-normal text-gray-500"
@@ -80,7 +78,7 @@
         </p>
       </div>
     {:else if conversations.nextCursor}
-      <InfiniteScroll onLoad={() => void conversations.load(true)} />
+      <InfiniteScroll onLoad={() => conversations.load(true)} />
     {/if}
   </div>
 </section>

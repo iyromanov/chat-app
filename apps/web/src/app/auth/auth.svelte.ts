@@ -1,11 +1,8 @@
 import { createRandomId } from '@shared/lib';
-import { io, type Socket } from 'socket.io-client';
-import { type ServerEvents, type CurrentUser } from '@chat/contracts';
-import { createMessages } from '@entities/message';
-import { messageSchema, type Message } from '@chat/contracts';
-import { createConversations } from '@entities/conversation';
-import { conversationSchema } from '@chat/contracts';
-import { createApi, readAuthDeadline, ApiError } from '@shared/api';
+import type { CurrentUser } from '@chat/contracts';
+import { readAuthDeadline, ApiError, type ApiClient } from '@shared/api';
+
+const LOGOUT_STORAGE_KEY = 'chat:logout';
 
 type AuthState =
   | { status: 'loading' | 'anonymous'; user: null }
@@ -13,115 +10,89 @@ type AuthState =
   | { status: 'error'; user: null; error: string };
 
 class Auth {
-  state = $state.raw<AuthState>({ status: 'loading', user: null });
-
-  private socket?: Socket<ServerEvents>;
-
   private expiryTimer?: ReturnType<typeof setTimeout>;
 
   private generation = 0;
 
-  private anonymous = () => {
+  private loginAttempt = 0;
+
+  private disposed = false;
+
+  state = $state.raw<AuthState>({ status: 'loading', user: null });
+
+  constructor(
+    private readonly getApi: () => ApiClient,
+    private readonly onUserChanged: (user: CurrentUser | null) => void,
+  ) {}
+
+  invalidate = () => {
     this.generation++;
     clearTimeout(this.expiryTimer);
-    this.socket?.disconnect();
-    this.socket = undefined;
-    this.conversations.clear();
-    this.messages.clear();
+    this.onUserChanged(null);
     this.state = { status: 'anonymous', user: null };
   };
 
-  readonly api = createApi({ onUnauthorized: this.anonymous });
-
-  readonly conversations = createConversations(this.api);
-
-  readonly messages = createMessages(this.api);
-
-  messageSaved = (message: Message) => {
-    this.messages.upsert(message);
-    this.conversations.applyMessage(message);
-  };
-
-  registered = (user: CurrentUser, expiresAt: number) => {
-    this.anonymous();
+  signedIn = (user: CurrentUser, expiresAt: number) => {
+    if (this.disposed) return;
+    this.loginAttempt++;
+    this.invalidate();
     const generation = this.generation;
     if (expiresAt <= Date.now()) return;
     this.expiryTimer = setTimeout(() => {
-      if (generation === this.generation) this.anonymous();
+      if (generation === this.generation) this.invalidate();
     }, expiresAt - Date.now());
     this.state = { status: 'authenticated', user };
-    this.socket = io({ withCredentials: true });
-    this.socket.on('conversation:created', (data) => {
-      if (generation !== this.generation) return;
-      const parsed = conversationSchema.safeParse(data);
-      if (parsed.success) this.conversations.upsert(parsed.data);
-    });
-    this.socket.on('message:created', (data) => {
-      if (generation !== this.generation) return;
-      const parsed = messageSchema.safeParse(data);
-      if (parsed.success) this.messageSaved(parsed.data);
-    });
-    this.socket.on('connect', () => {
-      if (generation === this.generation) {
-        void this.conversations.load();
-        void this.messages.load();
-      }
-    });
-    void this.conversations.load();
-    this.socket.on('auth:ended', () => {
-      if (generation === this.generation) this.anonymous();
-    });
-    this.socket.on('connect_error', () => {
-      if (generation === this.generation) {
-        void this.api.AuthController_me().catch(() => {});
-        void this.conversations.load();
-      }
-    });
+    this.onUserChanged(user);
   };
 
   logout = async () => {
+    if (this.disposed) return;
+    const loginAttempt = this.loginAttempt;
     try {
-      await this.api.AuthController_logout();
-      localStorage.setItem('chat:logout', createRandomId());
-      this.anonymous();
+      await this.getApi().AuthController_logout();
+      if (loginAttempt !== this.loginAttempt) return;
+      localStorage.setItem(LOGOUT_STORAGE_KEY, createRandomId());
+      this.invalidate();
     } catch (error) {
+      if (loginAttempt !== this.loginAttempt) return;
       if (error instanceof ApiError && error.body.code === 'UNAUTHORIZED')
-        this.anonymous();
+        this.invalidate();
       else throw error;
     }
   };
 
   storageChanged = (event: StorageEvent) => {
-    if (event.key === 'chat:logout') this.anonymous();
+    if (event.key === LOGOUT_STORAGE_KEY) this.invalidate();
   };
 
-  visibilityChanged = () => {
-    if (
-      document.visibilityState === 'visible' &&
-      this.state.status === 'authenticated'
-    ) {
-      void this.api.AuthController_me().catch(() => {});
-      void this.conversations.load();
-      void this.messages.load();
-    }
+  revalidate = async () => {
+    if (this.state.status === 'authenticated')
+      await this.getApi()
+        .AuthController_me()
+        .catch(() => {});
   };
 
   dispose = () => {
-    this.anonymous();
+    if (this.disposed) return;
+    this.disposed = true;
+    this.loginAttempt++;
+    this.invalidate();
   };
 
   restore = async () => {
-    this.anonymous();
+    if (this.disposed) return;
+    this.loginAttempt++;
+    this.invalidate();
     const generation = this.generation;
     this.state = { status: 'loading', user: null };
     try {
-      const { data, response } = await this.api.AuthController_me();
+      const { data, response } = await this.getApi().AuthController_me();
       if (generation !== this.generation) return;
-      if (data) this.registered(data, readAuthDeadline(response));
+      if (data) this.signedIn(data, readAuthDeadline(response));
     } catch (error) {
       if (generation !== this.generation) return;
       if (error instanceof ApiError && error.body.code === 'UNAUTHORIZED')
-        this.anonymous();
+        this.invalidate();
       else
         this.state = {
           status: 'error',
@@ -132,6 +103,9 @@ class Auth {
   };
 }
 
-export function createAuth() {
-  return new Auth();
+export function createAuth(
+  getApi: () => ApiClient,
+  onUserChanged: (user: CurrentUser | null) => void,
+) {
+  return new Auth(getApi, onUserChanged);
 }
