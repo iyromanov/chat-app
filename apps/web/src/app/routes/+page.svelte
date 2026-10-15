@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { CurrentUser } from '@chat/contracts';
+  import type { CurrentUser } from '@chat/contracts/users';
   import { ChatPage } from '@pages/chat';
   import { LoginPage } from '@pages/login';
   import { RegisterPage } from '@pages/register';

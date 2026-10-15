@@ -1,4 +1,5 @@
-import { currentUserSchema, type ServerEvents } from '@chat/contracts';
+import { currentUserSchema } from '@chat/contracts/users';
+import { type ServerEvents } from '@chat/contracts/realtime';
 import {
   OnGatewayInit,
   WebSocketGateway,

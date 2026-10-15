@@ -1,4 +1,4 @@
-import type { CurrentUser } from '@chat/contracts';
+import type { CurrentUser } from '@chat/contracts/users';
 import { createApi } from '@shared/api';
 import { createAuth } from '../auth';
 import { createChat } from '../chat';

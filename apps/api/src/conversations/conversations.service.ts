@@ -7,8 +7,8 @@ import {
 import type {
   Conversation,
   ConversationsPage,
-  PublicUser,
-} from '@chat/contracts';
+} from '@chat/contracts/conversations';
+import type { PublicUser } from '@chat/contracts/users';
 import { UsersService } from '../users/users.service';
 import { CONFIG, type Config } from '../common/config';
 import { paginate } from '../common/pagination';

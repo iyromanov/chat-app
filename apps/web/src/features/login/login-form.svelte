@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { loginSchema, type CurrentUser } from '@chat/contracts';
+  import { loginSchema } from '@chat/contracts/auth';
+  import { type CurrentUser } from '@chat/contracts/users';
   import { ApiError, readAuthDeadline, type ApiClient } from '@shared/api';
   import { Alert, Button, Helper, Input, Label } from 'flowbite-svelte';
   let {

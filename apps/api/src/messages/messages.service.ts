@@ -1,5 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { SendMessage, MessagesPage, Message } from '@chat/contracts';
+import type {
+  SendMessage,
+  MessagesPage,
+  Message,
+} from '@chat/contracts/messages';
 import { CONFIG, type Config } from '../common/config';
 import { paginate } from '../common/pagination';
 import { ConversationsService } from '../conversations/conversations.service';

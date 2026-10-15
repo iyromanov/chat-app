@@ -6,9 +6,9 @@ import request from 'supertest';
 import { io, type Socket } from 'socket.io-client';
 import {
   conversationSchema,
-  usersPageSchema,
   conversationsPageSchema,
-} from '@chat/contracts';
+} from '@chat/contracts/conversations';
+import { usersPageSchema } from '@chat/contracts/users';
 import { AppModule } from '../src/app.module';
 import { Clock } from '../src/common/clock';
 import { setup } from '../src/setup';

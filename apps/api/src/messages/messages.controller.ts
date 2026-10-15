@@ -8,7 +8,7 @@ import {
   ApiUnauthorizedResponse,
   ApiConflictResponse,
 } from '@nestjs/swagger';
-import type { Message, MessagesPage } from '@chat/contracts';
+import type { Message, MessagesPage } from '@chat/contracts/messages';
 import type { AuthRequest } from '../auth/auth-request';
 import { COOKIE } from '../auth/auth.constants';
 import { ErrorDto } from '../common/dto/error.dto';

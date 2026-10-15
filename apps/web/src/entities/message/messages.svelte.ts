@@ -1,4 +1,4 @@
-import type { Message } from '@chat/contracts';
+import type { Message } from '@chat/contracts/messages';
 import type { ApiClient } from '@shared/api';
 
 class Messages {

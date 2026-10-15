@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
   import { Alert, Button } from 'flowbite-svelte';
-  import type { Conversation } from '@chat/contracts';
+  import type { Conversation } from '@chat/contracts/conversations';
   import { UserAvatar } from '@entities/user';
   import { Icon } from '@shared/ui';
   import { ApiError, type ApiClient } from '@shared/api';

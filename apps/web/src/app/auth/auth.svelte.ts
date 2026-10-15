@@ -1,5 +1,5 @@
 import { createRandomId } from '@shared/lib';
-import type { CurrentUser } from '@chat/contracts';
+import type { CurrentUser } from '@chat/contracts/users';
 import { readAuthDeadline, ApiError, type ApiClient } from '@shared/api';
 
 const LOGOUT_STORAGE_KEY = 'chat:logout';

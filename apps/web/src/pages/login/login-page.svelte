@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { CurrentUser } from '@chat/contracts';
+  import type { CurrentUser } from '@chat/contracts/users';
   import type { ApiClient } from '@shared/api';
   import { LoginForm } from '@features/login';
   import { Button, Card, Heading, P } from 'flowbite-svelte';

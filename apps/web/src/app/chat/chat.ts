@@ -1,8 +1,5 @@
-import {
-  conversationSchema,
-  messageSchema,
-  type Message,
-} from '@chat/contracts';
+import { conversationSchema } from '@chat/contracts/conversations';
+import { messageSchema, type Message } from '@chat/contracts/messages';
 import { createConversations } from '@entities/conversation';
 import { createMessages } from '@entities/message';
 import type { ApiClient } from '@shared/api';

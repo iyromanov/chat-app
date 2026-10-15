@@ -4,7 +4,7 @@ import {
   conversationSchema,
   conversationsPageSchema,
   conversationsQuerySchema,
-} from '@chat/contracts';
+} from '@chat/contracts/conversations';
 export class StartConversationDto extends createZodDto(
   startConversationSchema,
 ) {}

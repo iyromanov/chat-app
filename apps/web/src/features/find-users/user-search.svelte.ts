@@ -1,4 +1,4 @@
-import type { PublicUser } from '@chat/contracts';
+import type { PublicUser } from '@chat/contracts/users';
 import type { ApiClient } from '@shared/api';
 
 class UserSearch {

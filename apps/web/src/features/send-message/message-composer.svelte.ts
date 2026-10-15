@@ -1,5 +1,5 @@
 import { createRandomId } from '@shared/lib';
-import { sendMessageSchema, type Message } from '@chat/contracts';
+import { sendMessageSchema, type Message } from '@chat/contracts/messages';
 import { ApiError, type ApiClient } from '@shared/api';
 
 type Draft = {

@@ -4,7 +4,7 @@ import type { INestApplication } from '@nestjs/common';
 import { GenericContainer, type StartedTestContainer } from 'testcontainers';
 import request from 'supertest';
 import { io, type Socket } from 'socket.io-client';
-import { messageSchema, messagesPageSchema } from '@chat/contracts';
+import { messageSchema, messagesPageSchema } from '@chat/contracts/messages';
 import { AppModule } from '../src/app.module';
 import { Clock } from '../src/common/clock';
 import { setup } from '../src/setup';

@@ -5,7 +5,7 @@ import {
   messageSchema,
   messagesPageSchema,
   messagesQuerySchema,
-} from '@chat/contracts';
+} from '@chat/contracts/messages';
 export class SendMessageDto extends createZodDto(sendMessageSchema) {}
 export class MessageDto extends createZodDto(messageSchema) {}
 export class MessagesPageDto extends createZodDto(messagesPageSchema) {}

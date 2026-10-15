@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, type PipelineStage } from 'mongoose';
-import type { Message as PublicMessage } from '@chat/contracts';
+import type { Message as PublicMessage } from '@chat/contracts/messages';
 import { Message } from './message.schema';
 import { presentMessage, type StoredMessage } from './message.mapper';
 

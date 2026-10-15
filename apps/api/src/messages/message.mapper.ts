@@ -1,4 +1,4 @@
-import type { Message as PublicMessage } from '@chat/contracts';
+import type { Message as PublicMessage } from '@chat/contracts/messages';
 import type { Types } from 'mongoose';
 import type { Message } from './message.schema';
 

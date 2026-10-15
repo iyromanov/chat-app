@@ -1,6 +1,6 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import type { Message } from '@chat/contracts';
+import type { Message } from '@chat/contracts/messages';
 import { Model, Types } from 'mongoose';
 import {
   MessageActivityService,

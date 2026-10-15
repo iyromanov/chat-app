@@ -2,7 +2,7 @@
   import { Button, Card, Heading, Helper, P } from 'flowbite-svelte';
   import { RegistrationForm } from '@features/register';
   import type { ApiClient } from '@shared/api';
-  import type { CurrentUser } from '@chat/contracts';
+  import type { CurrentUser } from '@chat/contracts/users';
   let {
     api,
     onRegistered,

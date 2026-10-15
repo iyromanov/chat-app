@@ -1,5 +1,5 @@
 import { io, type Socket } from 'socket.io-client';
-import type { ServerEvents } from '@chat/contracts';
+import type { ServerEvents } from '@chat/contracts/realtime';
 
 type RealtimeHandlers = {
   connected: () => void;

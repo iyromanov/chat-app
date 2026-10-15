@@ -1,13 +1,8 @@
 import { Injectable, ConflictException, Inject } from '@nestjs/common';
 import { CONFIG, type Config } from '../common/config';
 import { paginate } from '../common/pagination';
-import type {
-  CurrentUser,
-  Login,
-  PublicUser,
-  Registration,
-  UsersPage,
-} from '@chat/contracts';
+import type { CurrentUser, PublicUser, UsersPage } from '@chat/contracts/users';
+import type { Login, Registration } from '@chat/contracts/auth';
 import { UsersRepository } from './users.repository';
 import { publicUser } from './user.mapper';
 import { hashPassword, verifyPassword } from './password-hasher';

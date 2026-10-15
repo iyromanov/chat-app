@@ -1,7 +1,10 @@
 import { ConflictException, Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import type { Message as PublicMessage, SendMessage } from '@chat/contracts';
+import type {
+  Message as PublicMessage,
+  SendMessage,
+} from '@chat/contracts/messages';
 import { isDuplicateKeyError } from '../common/mongo-errors';
 import { Clock } from '../common/clock';
 import { Message } from './message.schema';

@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount, onDestroy, tick } from 'svelte';
   import { Alert, Button, Input, Spinner } from 'flowbite-svelte';
-  import type { Conversation, Message } from '@chat/contracts';
+  import type { Conversation } from '@chat/contracts/conversations';
+  import type { Message } from '@chat/contracts/messages';
   import type { ApiClient } from '@shared/api';
   import { Icon, InfiniteScroll } from '@shared/ui';
   import { MessageHistory } from '@widgets/message-history';

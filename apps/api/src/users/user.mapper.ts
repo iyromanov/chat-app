@@ -1,4 +1,4 @@
-import type { CurrentUser } from '@chat/contracts';
+import type { CurrentUser } from '@chat/contracts/users';
 import type { UserRecord } from './user.record';
 
 export function publicUser(user: UserRecord): CurrentUser {

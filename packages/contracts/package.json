@@ -2,10 +2,8 @@
   "name": "@chat/contracts",
   "version": "0.0.0",
   "private": true,
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc && tsc -p tsconfig.esm.json && node scripts/mark-esm.mjs",
+    "build": "node scripts/clean.mjs && tsc && tsc -p tsconfig.esm.json && node scripts/mark-esm.mjs",
     "check": "tsc --noEmit"
   },
   "dependencies": {
@@ -15,10 +13,57 @@
     "typescript": "^5.9.3"
   },
   "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/esm/index.js",
-      "require": "./dist/index.js"
+    "./auth": {
+      "types": "./dist/auth/auth.d.ts",
+      "import": "./dist/esm/auth/auth.js",
+      "require": "./dist/auth/auth.js"
+    },
+    "./users": {
+      "types": "./dist/users/users.d.ts",
+      "import": "./dist/esm/users/users.js",
+      "require": "./dist/users/users.js"
+    },
+    "./messages": {
+      "types": "./dist/messages/messages.d.ts",
+      "import": "./dist/esm/messages/messages.js",
+      "require": "./dist/messages/messages.js"
+    },
+    "./conversations": {
+      "types": "./dist/conversations/conversations.d.ts",
+      "import": "./dist/esm/conversations/conversations.js",
+      "require": "./dist/conversations/conversations.js"
+    },
+    "./realtime": {
+      "types": "./dist/realtime/events.d.ts",
+      "import": "./dist/esm/realtime/events.js",
+      "require": "./dist/realtime/events.js"
+    },
+    "./common": {
+      "types": "./dist/common/index.d.ts",
+      "import": "./dist/esm/common/index.js",
+      "require": "./dist/common/index.js"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "auth": [
+        "dist/auth/auth.d.ts"
+      ],
+      "users": [
+        "dist/users/users.d.ts"
+      ],
+      "messages": [
+        "dist/messages/messages.d.ts"
+      ],
+      "conversations": [
+        "dist/conversations/conversations.d.ts"
+      ],
+      "realtime": [
+        "dist/realtime/events.d.ts"
+      ],
+      "common": [
+        "dist/common/index.d.ts"
+      ]
     }
   }
 }

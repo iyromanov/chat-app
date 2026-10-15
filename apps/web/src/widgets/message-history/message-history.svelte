@@ -3,7 +3,7 @@
   import { Alert, Button, Spinner } from 'flowbite-svelte';
   import type { MessageStore } from '@entities/message';
   import { UserAvatar } from '@entities/user';
-  import type { Conversation } from '@chat/contracts';
+  import type { Conversation } from '@chat/contracts/conversations';
   import {
     SendMessage,
     type MessageComposerStore,

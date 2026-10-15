@@ -1,7 +1,5 @@
-import type {
-  Conversation as PublicConversation,
-  PublicUser,
-} from '@chat/contracts';
+import type { Conversation as PublicConversation } from '@chat/contracts/conversations';
+import type { PublicUser } from '@chat/contracts/users';
 import type { ConversationRecord } from './conversations.repository';
 
 export function presentConversation(

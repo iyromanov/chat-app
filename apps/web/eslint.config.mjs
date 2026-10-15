@@ -48,7 +48,8 @@ const architecture = {
           else if (
             source.startsWith('$lib') ||
             source.includes('apps/api') ||
-            (source.startsWith('@chat/') && source !== '@chat/contracts')
+            (source.startsWith('@chat/') &&
+              !source.startsWith('@chat/contracts/'))
           ) {
             context.report({ node, messageId: 'boundary' });
             return;

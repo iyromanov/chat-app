@@ -1,9 +1,6 @@
 import { Api } from './generated';
-import {
-  AUTH_EXPIRES_HEADER,
-  authDeadlineSchema,
-  errorSchema,
-} from '@chat/contracts';
+import { AUTH_EXPIRES_HEADER, authDeadlineSchema } from '@chat/contracts/auth';
+import { errorSchema } from '@chat/contracts/common';
 export class ApiError extends Error {
   constructor(
     readonly body: {

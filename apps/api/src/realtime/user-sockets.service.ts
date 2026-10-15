@@ -1,4 +1,4 @@
-import type { ServerEvents } from '@chat/contracts';
+import type { ServerEvents } from '@chat/contracts/realtime';
 import { Injectable } from '@nestjs/common';
 import type { Server, Socket } from 'socket.io';
 import { roomKeys } from './room-keys';

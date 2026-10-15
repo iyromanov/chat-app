@@ -9,7 +9,8 @@ import { JwtService, type JwtSignOptions } from '@nestjs/jwt';
 import { AppModule } from '../src/app.module';
 import { Clock } from '../src/common/clock';
 import { setup } from '../src/setup';
-import { currentUserSchema, errorSchema } from '@chat/contracts';
+import { currentUserSchema } from '@chat/contracts/users';
+import { errorSchema } from '@chat/contracts/common';
 
 describe('Authentication HTTP boundary (real MongoDB)', () => {
   let container: StartedTestContainer;

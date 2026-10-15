@@ -20,7 +20,8 @@ import {
 } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { ErrorDto } from '../common/dto/error.dto';
-import { AUTH_EXPIRES_HEADER, type CurrentUser } from '@chat/contracts';
+import { AUTH_EXPIRES_HEADER } from '@chat/contracts/auth';
+import { type CurrentUser } from '@chat/contracts/users';
 import { Public } from './public';
 import { LocalAuthGuard } from './local-auth.guard';
 import { LoginDto } from './dto/login.dto';
