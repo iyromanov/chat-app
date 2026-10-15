@@ -7,6 +7,7 @@ export default {
     files: { routes: 'src/app/routes', appTemplate: 'src/app/app.html' },
     alias: {
       '@pages': 'src/pages',
+      '@widgets': 'src/widgets',
       '@features': 'src/features',
       '@shared': 'src/shared',
       '@entities': 'src/entities',

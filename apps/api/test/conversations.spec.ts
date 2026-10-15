@@ -256,18 +256,18 @@ describe('Users and conversations HTTP / Socket.io boundaries', () => {
 
   it('paginates conversations with tied creation times by descending ID and binds cursors to the viewer', async () => {
     const viewer = await register('ConversationPager');
+    const recipients = await Promise.all(
+      Array.from({ length: 52 }, (_, index) =>
+        register(`ConversationPage_${String(index).padStart(2, '0')}`),
+      ),
+    );
     const users = await request(app.getHttpServer())
       .get('/api/users')
-      .query({ search: 'page_' })
-      .set('Cookie', viewer.cookie)
-      .expect(200);
-    const tail = await request(app.getHttpServer())
-      .get('/api/users')
-      .query({ search: 'page_', cursor: users.body.nextCursor })
+      .query({ search: 'ConversationPage_' })
       .set('Cookie', viewer.cookie)
       .expect(200);
     const created = await Promise.all(
-      [...users.body.items, ...tail.body.items].map((user: { id: string }) =>
+      recipients.map((user) =>
         request(app.getHttpServer())
           .post('/api/conversations')
           .set('Cookie', viewer.cookie)
