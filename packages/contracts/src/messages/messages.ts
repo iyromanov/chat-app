@@ -22,7 +22,9 @@ export const messageSchema = z.object({
 });
 export type Message = z.infer<typeof messageSchema>;
 
-export const messagesQuerySchema = paginationQuerySchema;
+export const messagesQuerySchema = paginationQuerySchema.extend({
+  after: z.union([objectIdSchema, z.literal('start')]).optional(),
+});
 export const messagesPageSchema = z.object({
   items: z.array(messageSchema),
   nextCursor: z.union([z.string().min(1), z.null()]),

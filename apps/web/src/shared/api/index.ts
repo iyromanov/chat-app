@@ -8,6 +8,7 @@ export class ApiError extends Error {
       message: string;
       fields?: Record<string, string[]>;
     },
+    readonly status: number,
   ) {
     super(body.message);
   }
@@ -38,6 +39,7 @@ export function createApi(options: {
               code: 'NETWORK_ERROR',
               message: 'Service unavailable. Please try again later',
             },
+        response.status,
       );
     },
   });

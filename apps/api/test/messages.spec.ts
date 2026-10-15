@@ -280,6 +280,100 @@ describe('Messages HTTP / Socket.io boundaries', () => {
         .set('Cookie', cookie)
         .expect(400);
   });
+  it('recovers every missed page after reconnect and safely retries an unacknowledged send', async () => {
+    const alice = await register('RecoveryAlice');
+    const bob = await register('RecoveryBob');
+    const conversation = (
+      await request(app.getHttpServer())
+        .post('/api/conversations')
+        .set('Cookie', alice.cookie)
+        .send({ userId: bob.id })
+        .expect(201)
+    ).body;
+    const path = `/api/conversations/${conversation.id}/messages`;
+    const send = (index: number) =>
+      request(app.getHttpServer())
+        .post(path)
+        .set('Cookie', alice.cookie)
+        .send({ text: `Missed ${index}`, attemptId: `missed-${index}` })
+        .expect(201);
+    const anchor = (await send(0)).body;
+    const socket = io(url, {
+      transports: ['websocket'],
+      reconnection: false,
+      autoConnect: false,
+      extraHeaders: { Cookie: bob.cookie },
+    });
+    sockets.push(socket);
+    const connect = async () => {
+      const ready = new Promise<void>((resolve, reject) => {
+        socket.once('auth:ready', () => resolve());
+        socket.once('connect_error', reject);
+      });
+      socket.connect();
+      await ready;
+    };
+    await connect();
+    socket.disconnect();
+    const missed = [];
+    for (let index = 1; index <= 105; index++)
+      missed.push((await send(index)).body);
+    await connect();
+    const first = (
+      await request(app.getHttpServer())
+        .get(path)
+        .query({ after: anchor.id })
+        .set('Cookie', bob.cookie)
+        .expect(200)
+    ).body;
+    expect(first.items).toEqual(missed.slice(0, 50));
+    const second = (
+      await request(app.getHttpServer())
+        .get(path)
+        .query({ after: anchor.id, cursor: first.nextCursor })
+        .set('Cookie', bob.cookie)
+        .expect(200)
+    ).body;
+    expect(second.items).toEqual(missed.slice(50, 100));
+    const third = (
+      await request(app.getHttpServer())
+        .get(path)
+        .query({ after: anchor.id, cursor: second.nextCursor })
+        .set('Cookie', bob.cookie)
+        .expect(200)
+    ).body;
+    expect(third).toEqual({ items: missed.slice(100), nextCursor: null });
+    for (const query of [
+      { cursor: first.nextCursor },
+      { after: missed[0].id, cursor: first.nextCursor },
+      { after: 'broken' },
+    ])
+      await request(app.getHttpServer())
+        .get(path)
+        .query(query)
+        .set('Cookie', bob.cookie)
+        .expect(400);
+    await request(app.getHttpServer())
+      .get(path)
+      .query({ after: anchor.id, cursor: first.nextCursor })
+      .set('Cookie', alice.cookie)
+      .expect(400);
+    const fromStart = (
+      await request(app.getHttpServer())
+        .get(path)
+        .query({ after: 'start' })
+        .set('Cookie', bob.cookie)
+        .expect(200)
+    ).body;
+    expect(fromStart.items).toEqual([anchor, ...missed.slice(0, 49)]);
+    expect((await send(105)).body).toEqual(missed[104]);
+    const notification = new Promise((resolve) =>
+      socket.once('message:created', resolve),
+    );
+    const live = (await send(106)).body;
+    expect(await notification).toEqual(live);
+    socket.disconnect();
+  });
   it('derives latest message activity when listing and reopening conversations', async () => {
     const alice = await register('ActivityAlice');
     const bob = await register('ActivityBob');

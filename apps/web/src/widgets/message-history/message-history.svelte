@@ -16,12 +16,14 @@
     composer,
     userId,
     onBack,
+    connectionState,
   }: {
     messages: MessageStore;
     conversation: Conversation;
     composer: MessageComposerStore;
     userId: string;
     onBack: () => void;
+    connectionState: string;
   } = $props();
   let scroller: HTMLDivElement;
   let nearBottom = true;
@@ -107,6 +109,9 @@
   <h2 class="min-w-0 truncate text-sm font-semibold text-gray-900">
     {conversation.counterpart.username}
   </h2>
+  <p role="status" aria-live="polite" class="ml-auto text-xs text-gray-500">
+    {connectionState}
+  </p>
 </header>
 <div class="relative min-h-0 flex-1">
   <div
@@ -133,7 +138,7 @@
     {#if messages.error}<div class="mx-auto mb-4 max-w-md space-y-2">
         <Alert color="red" role="alert">{messages.error}</Alert><Button
           size="sm"
-          onclick={() => (messages.nextCursor ? older() : messages.load())}
+          onclick={() => (messages.failedLoadMore ? older() : messages.load())}
           >Try again</Button
         >
       </div>{/if}

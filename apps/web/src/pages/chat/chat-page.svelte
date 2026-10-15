@@ -1,8 +1,7 @@
 <script lang="ts">
-  import { onMount, onDestroy, tick } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { Alert, Button, Input, Spinner } from 'flowbite-svelte';
   import type { Conversation } from '@chat/contracts/conversations';
-  import type { Message } from '@chat/contracts/messages';
   import type { ApiClient } from '@shared/api';
   import { Icon, InfiniteScroll } from '@shared/ui';
   import { MessageHistory } from '@widgets/message-history';
@@ -11,30 +10,27 @@
   import type { ConversationStore } from '@entities/conversation';
   import { createUserSearch } from '@features/find-users';
   import { StartConversation } from '@features/start-conversation';
-  import { createMessageComposer } from '@features/send-message';
+  import type { MessageComposerStore } from '@features/send-message';
   let {
     api,
     conversations,
     messages,
     userId,
-    onSent,
+    composer,
     onLogout,
     logoutError,
+    connectionState,
   }: {
     api: ApiClient;
     conversations: ConversationStore;
     messages: MessageStore;
     userId: string;
-    onSent: (message: Message) => void;
+    composer: MessageComposerStore;
     onLogout: () => Promise<void>;
     logoutError: string;
+    connectionState: string;
   } = $props();
   const users = createUserSearch(() => api);
-  const composer = createMessageComposer(
-    () => api,
-    (message) => onSent(message),
-  );
-  onDestroy(composer.dispose);
   let selectedId = $state<string | null>(null);
   let selected = $derived(
     conversations.items.find((item) => item.id === selectedId),
@@ -195,6 +191,13 @@
         </div>
       </div>
     </header>
+    <p
+      role="status"
+      aria-live="polite"
+      class="shrink-0 px-4 pb-2 text-xs text-gray-500"
+    >
+      {connectionState}
+    </p>
     {#if logoutError}<div class="shrink-0 px-3 pb-2">
         <Alert color="red" role="alert">{logoutError}</Alert>
       </div>{/if}
@@ -290,6 +293,7 @@
     {#if selected}
       <MessageHistory
         {messages}
+        {connectionState}
         conversation={selected}
         {composer}
         {userId}

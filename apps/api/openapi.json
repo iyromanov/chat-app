@@ -203,21 +203,21 @@
         "operationId": "UsersController_list",
         "parameters": [
           {
-            "name": "search",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "maxLength": 100,
-              "type": "string"
-            }
-          },
-          {
             "name": "cursor",
             "required": false,
             "in": "query",
             "schema": {
               "minLength": 1,
               "maxLength": 2048,
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 100,
               "type": "string"
             }
           }
@@ -490,6 +490,25 @@
               "minLength": 1,
               "maxLength": 2048,
               "type": "string"
+            }
+          },
+          {
+            "name": "after",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{24}$"
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "start"
+                  ]
+                }
+              ]
             }
           }
         ],

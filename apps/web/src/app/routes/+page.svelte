@@ -60,10 +60,11 @@
   <main>
     {#key context}<ChatPage
         api={context.api}
+        connectionState={context.connectionState}
         conversations={context.chat.conversations}
         messages={context.chat.messages}
         userId={auth.state.user.id}
-        onSent={context.chat.messageSaved}
+        composer={context.chat.composer}
         onLogout={logout}
         {logoutError}
       />{/key}

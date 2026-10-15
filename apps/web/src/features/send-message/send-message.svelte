@@ -44,6 +44,18 @@
   {#if draft.error}<Alert color="red" role="alert" class="mb-3"
       >{draft.error}</Alert
     >{/if}
+  {#if draft.status === 'uncertain' && draft.attempt}
+    <div class="mb-3 space-y-2">
+      <p class="whitespace-pre-wrap text-sm [overflow-wrap:anywhere]">
+        {draft.attempt.text}
+      </p>
+      <Button size="sm" onclick={() => composer.retry(conversationId)}
+        >Retry original message</Button
+      >
+    </div>
+  {:else if draft.status === 'confirmed'}
+    <p role="status" class="mb-2 text-xs text-gray-500">Message saved</p>
+  {/if}
   <div class="flex items-end gap-3">
     {#key conversationId}
       <Textarea
@@ -64,7 +76,7 @@
       type="submit"
       pill
       aria-label={draft.sending ? 'Sending message' : 'Send message'}
-      disabled={draft.sending || !draft.text.trim()}
+      disabled={draft.sending || !!draft.attempt || !draft.text.trim()}
       class="h-11 w-11 shrink-0 p-0"
     >
       <Icon name="send" size={19} />

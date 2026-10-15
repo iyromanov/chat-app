@@ -7,6 +7,7 @@ import { createRealtime } from '../realtime';
 type AuthenticatedContext = {
   api: ReturnType<typeof createApi>;
   chat: ReturnType<typeof createChat>;
+  connectionState: string;
   dispose: () => void;
 };
 
@@ -38,12 +39,19 @@ export function createAppRuntime(
     api = createClient();
     if (!user) return;
 
-    const chat = createChat(api);
+    const chat = createChat(api, user.id);
+    let connectionState = $state('Connecting…');
     const realtime = createRealtime(options.baseUrl, {
-      connected: chat.refresh,
-      connectionFailed: () => {
-        auth.revalidate();
+      connected: () => {
+        connectionState = 'Connected';
         chat.refresh();
+      },
+      disconnected: () => {
+        connectionState = 'Disconnected — reconnecting…';
+      },
+      connectionFailed: () => {
+        connectionState = 'Disconnected — reconnecting…';
+        auth.revalidate();
       },
       authEnded: auth.invalidate,
       conversationCreated: chat.conversationCreated,
@@ -52,6 +60,9 @@ export function createAppRuntime(
     context = {
       api,
       chat,
+      get connectionState() {
+        return connectionState;
+      },
       dispose() {
         realtime.dispose();
         chat.dispose();

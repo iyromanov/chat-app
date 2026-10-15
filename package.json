@@ -10,6 +10,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "pnpm --filter @chat/contracts build && pnpm --filter @chat/api test && pnpm --filter @chat/web test",
+    "generate:check": "node scripts/check-generated.mjs",
     "generate": "pnpm --filter @chat/contracts build && pnpm --filter @chat/api openapi && node scripts/generate-api-client.mjs"
   },
   "devDependencies": {

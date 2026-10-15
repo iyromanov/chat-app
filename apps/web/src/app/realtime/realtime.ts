@@ -3,6 +3,7 @@ import type { ServerEvents } from '@chat/contracts/realtime';
 
 type RealtimeHandlers = {
   connected: () => void;
+  disconnected: () => void;
   connectionFailed: () => void;
   authEnded: () => void;
   conversationCreated: (data: unknown) => void;
@@ -19,8 +20,11 @@ export function createRealtime(
   });
   let disposed = false;
 
-  socket.on('connect', () => {
+  socket.on('auth:ready', () => {
     if (!disposed) handlers.connected();
+  });
+  socket.on('disconnect', () => {
+    if (!disposed) handlers.disconnected();
   });
   socket.on('connect_error', () => {
     if (!disposed) handlers.connectionFailed();

@@ -50,18 +50,26 @@ test('sending and logout work without crypto.randomUUID', async () => {
           send: async (_conversationId, body) => {
             requests.push(body);
             if (requests.length === 1) throw new Error('Response lost');
-            return { data: { id: 'saved-message', ...body } };
+            return {
+              data: {
+                id: 'saved-message',
+                conversationId: 'conversation',
+                senderId: 'sender',
+                ...body,
+              },
+            };
           },
         },
       }),
       (message) => saved.push(message),
+      'sender',
     );
     composer.open('conversation');
     composer.drafts.conversation.text = 'Hello';
     await composer.send('conversation');
     assert.equal(requests.length, 1);
     assert.match(requests[0].attemptId, /^[a-f0-9]{32}$/);
-    await composer.send('conversation');
+    await composer.retry('conversation');
     assert.equal(requests[1].attemptId, requests[0].attemptId);
     assert.equal(saved.length, 1);
     assert.equal(composer.drafts.conversation.text, '');

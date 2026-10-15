@@ -552,13 +552,13 @@ export class Api<
      */
     list: (
       query?: {
-        /** @maxLength 100 */
-        search?: string;
         /**
          * @minLength 1
          * @maxLength 2048
          */
         cursor?: string;
+        /** @maxLength 100 */
+        search?: string;
       },
       params: RequestParams = {},
     ) =>
@@ -674,6 +674,7 @@ export class Api<
          * @maxLength 2048
          */
         cursor?: string;
+        after?: string | "start";
       },
       params: RequestParams = {},
     ) =>

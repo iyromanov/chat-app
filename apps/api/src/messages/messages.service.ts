@@ -35,16 +35,21 @@ export class MessagesService {
     userId: string,
     conversationId: string,
     cursor?: string,
+    after?: string,
   ): Promise<MessagesPage> {
     await this.conversations.getForParticipant(conversationId, userId);
+    const anchor =
+      after && after !== 'start'
+        ? await this.messages.position(conversationId, after)
+        : undefined;
     const page = await paginate({
       cursor,
-      scope: `messages:${userId}:${conversationId}`,
+      scope: `messages:${userId}:${conversationId}:${after ?? 'older'}`,
       secret: this.config.JWT_SECRET,
-      load: ({ limit, after }) =>
-        this.messages.list(conversationId, limit, after),
+      load: ({ limit, after: position }) =>
+        this.messages.list(conversationId, limit, position ?? anchor, !!after),
       position: (row) => ({ key: row.createdAt, id: row.id }),
     });
-    return { ...page, items: page.items.reverse() };
+    return after ? page : { ...page, items: page.items.reverse() };
   }
 }

@@ -66,12 +66,20 @@ class Conversations {
     this.loading = true;
     this.error = '';
     try {
-      const { data } = await this.api.conversations.list({
-        cursor: more ? this.nextCursor! : undefined,
-      });
-      if (generation !== this.generation || !data) return;
-      for (const item of data.items) this.upsert(item);
-      this.nextCursor = data.nextCursor;
+      let remaining = more ? [] : this.items.map((item) => item.id);
+      let cursor = more ? this.nextCursor : null;
+      do {
+        const { data } = await this.api.conversations.list({
+          cursor: cursor ?? undefined,
+        });
+        if (generation !== this.generation || !data) return;
+        for (const item of data.items) {
+          this.upsert(item);
+          remaining = remaining.filter((id) => id !== item.id);
+        }
+        cursor = data.nextCursor;
+        this.nextCursor = cursor;
+      } while (!more && cursor && remaining.length);
     } catch {
       if (generation === this.generation)
         this.error = 'Unable to load conversations. Please try again';
