@@ -11,15 +11,13 @@ import type {
 } from '@chat/contracts';
 import { UsersService } from '../users/users.service';
 import { CONFIG, type Config } from '../common/config';
-import { decodeCursor, encodeCursor } from '../common/cursor';
+import { paginate } from '../common/pagination';
 import { UserSocketsService } from '../realtime/user-sockets.service';
 import {
   ConversationsRepository,
   type ConversationRecord,
 } from './conversations.repository';
 import { presentConversation } from './conversation.mapper';
-
-const PAGE_SIZE = 50;
 
 @Injectable()
 export class ConversationsService {
@@ -56,28 +54,27 @@ export class ConversationsService {
   }
 
   async list(userId: string, cursor?: string): Promise<ConversationsPage> {
-    const scope = `conversations:${userId}`;
-    const after = decodeCursor(cursor, scope, this.config.JWT_SECRET);
-    const rows = await this.conversations.listForParticipant(
-      userId,
-      PAGE_SIZE + 1,
-      after ? { createdAt: new Date(after.key), id: after.id } : undefined,
+    const page = await paginate({
+      cursor,
+      scope: `conversations:${userId}`,
+      secret: this.config.JWT_SECRET,
+      load: ({ limit, after }) =>
+        this.conversations.listForParticipant(
+          userId,
+          limit,
+          after ? { createdAt: new Date(after.key), id: after.id } : undefined,
+        ),
+      position: (row) => ({ key: row.createdAt.toISOString(), id: row.id }),
+    });
+    const users = await this.loadUsers(
+      page.items.flatMap((row) => row.participants),
     );
-    const page = rows.slice(0, PAGE_SIZE);
-    const last = page.at(-1);
-    const users = await this.loadUsers(page.flatMap((row) => row.participants));
     return {
-      items: page.map((row) => {
+      items: page.items.map((row) => {
         const counterpartId = row.participants.find((id) => id !== userId);
         return presentConversation(row, this.getUser(users, counterpartId));
       }),
-      nextCursor:
-        rows.length > PAGE_SIZE && last
-          ? encodeCursor(
-              { scope, key: last.createdAt.toISOString(), id: last.id },
-              this.config.JWT_SECRET,
-            )
-          : null,
+      nextCursor: page.nextCursor,
     };
   }
 

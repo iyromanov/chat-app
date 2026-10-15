@@ -80,15 +80,6 @@ export class AuthController {
     return user;
   }
 
-  private setCookie(response: Response, token: string) {
-    response.cookie(COOKIE, token, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: this.config.COOKIE_SECURE === 'true',
-      maxAge: LIFETIME * 1000,
-      path: '/',
-    });
-  }
   @Post('logout')
   @HttpCode(204)
   @ApiCookieAuth(COOKIE)
@@ -120,5 +111,15 @@ export class AuthController {
       request.auth.expiresAt.toISOString(),
     );
     return request.user;
+  }
+
+  private setCookie(response: Response, token: string) {
+    response.cookie(COOKIE, token, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: this.config.COOKIE_SECURE === 'true',
+      maxAge: LIFETIME * 1000,
+      path: '/',
+    });
   }
 }

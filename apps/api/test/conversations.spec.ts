@@ -95,10 +95,35 @@ describe('Users and conversations HTTP / Socket.io boundaries', () => {
   it('paginates 50 users in stable username order and rejects malformed or mismatched cursors', async () => {
     const viewer = await register('Viewer');
     await Promise.all(
-      Array.from({ length: 52 }, (_, i) =>
+      Array.from({ length: 50 }, (_, i) =>
         register(`Page_${String(i).padStart(2, '0')}`),
       ),
     );
+    const full = await request(app.getHttpServer())
+      .get('/api/users')
+      .query({ search: 'page_' })
+      .set('Cookie', viewer.cookie)
+      .expect(200);
+    expect(full.body.items).toHaveLength(50);
+    expect(full.body.nextCursor).toBeNull();
+    await register('Page_50');
+    const overflow = await request(app.getHttpServer())
+      .get('/api/users')
+      .query({ search: 'page_' })
+      .set('Cookie', viewer.cookie)
+      .expect(200);
+    expect(overflow.body.items).toEqual(full.body.items);
+    expect(overflow.body.nextCursor).toEqual(expect.any(String));
+    const single = await request(app.getHttpServer())
+      .get('/api/users')
+      .query({ search: 'page_', cursor: overflow.body.nextCursor })
+      .set('Cookie', viewer.cookie)
+      .expect(200);
+    expect(
+      single.body.items.map((u: { username: string }) => u.username),
+    ).toEqual(['Page_50']);
+    expect(single.body.nextCursor).toBeNull();
+    await register('Page_51');
     const first = await request(app.getHttpServer())
       .get('/api/users')
       .query({ search: 'page_' })
@@ -266,15 +291,39 @@ describe('Users and conversations HTTP / Socket.io boundaries', () => {
       .query({ search: 'ConversationPage_' })
       .set('Cookie', viewer.cookie)
       .expect(200);
-    const created = await Promise.all(
-      recipients.map((user) =>
-        request(app.getHttpServer())
-          .post('/api/conversations')
-          .set('Cookie', viewer.cookie)
-          .send({ userId: user.id })
-          .expect(201),
-      ),
-    );
+    const create = (user: { id: string }) =>
+      request(app.getHttpServer())
+        .post('/api/conversations')
+        .set('Cookie', viewer.cookie)
+        .send({ userId: user.id })
+        .expect(201);
+    const created = await Promise.all(recipients.slice(0, 50).map(create));
+    const full = await request(app.getHttpServer())
+      .get('/api/conversations')
+      .set('Cookie', viewer.cookie)
+      .expect(200);
+    expect(full.body.items).toHaveLength(50);
+    expect(full.body.nextCursor).toBeNull();
+    created.push(await create(recipients[50]));
+    const overflow = await request(app.getHttpServer())
+      .get('/api/conversations')
+      .set('Cookie', viewer.cookie)
+      .expect(200);
+    expect(overflow.body.items).toHaveLength(50);
+    expect(overflow.body.nextCursor).toEqual(expect.any(String));
+    const single = await request(app.getHttpServer())
+      .get('/api/conversations')
+      .query({ cursor: overflow.body.nextCursor })
+      .set('Cookie', viewer.cookie)
+      .expect(200);
+    const earliestId = created
+      .map((result) => result.body.id as string)
+      .sort()[0];
+    expect(single.body.items.map((item: { id: string }) => item.id)).toEqual([
+      earliestId,
+    ]);
+    expect(single.body.nextCursor).toBeNull();
+    created.push(await create(recipients[51]));
     const expected = created
       .map((result) => result.body.id as string)
       .sort()

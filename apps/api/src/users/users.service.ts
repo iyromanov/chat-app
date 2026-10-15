@@ -1,6 +1,6 @@
 import { Injectable, ConflictException, Inject } from '@nestjs/common';
 import { CONFIG, type Config } from '../common/config';
-import { encodeCursor, decodeCursor } from '../common/cursor';
+import { paginate } from '../common/pagination';
 import type {
   CurrentUser,
   Login,
@@ -11,8 +11,6 @@ import type {
 import { UsersRepository } from './users.repository';
 import { publicUser } from './user.mapper';
 import { hashPassword, verifyPassword } from './password-hasher';
-
-const PAGE_SIZE = 50;
 
 /** Handles registration, credential verification and user discovery. */
 @Injectable()
@@ -54,27 +52,27 @@ export class UsersService {
     cursor?: string,
   ): Promise<UsersPage> {
     const normalized: string = search.toLowerCase();
-    const scope: string = `users:${currentId}:${normalized}`;
-    const after = decodeCursor(cursor, scope, this.config.JWT_SECRET);
-    const users = await this.users.listOthers({
-      currentId,
-      normalizedSearch: normalized,
-      limit: PAGE_SIZE + 1,
-      after: after
-        ? { normalizedUsername: after.key, id: after.id }
-        : undefined,
+    const page = await paginate({
+      cursor,
+      scope: `users:${currentId}:${normalized}`,
+      secret: this.config.JWT_SECRET,
+      load: ({ limit, after }) =>
+        this.users.listOthers({
+          currentId,
+          normalizedSearch: normalized,
+          limit,
+          after: after
+            ? { normalizedUsername: after.key, id: after.id }
+            : undefined,
+        }),
+      position: (user) => ({ key: user.normalizedUsername, id: user.id }),
     });
-    const page = users.slice(0, PAGE_SIZE);
-    const last = page.at(-1);
     return {
-      items: page.map((user) => ({ id: user.id, username: user.username })),
-      nextCursor:
-        users.length > PAGE_SIZE && last
-          ? encodeCursor(
-              { scope, key: last.normalizedUsername, id: last.id },
-              this.config.JWT_SECRET,
-            )
-          : null,
+      items: page.items.map((user) => ({
+        id: user.id,
+        username: user.username,
+      })),
+      nextCursor: page.nextCursor,
     };
   }
 
