@@ -4,7 +4,7 @@
 
 **Blocked by:** 01 — Локальный запуск и регистрация.
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
 **Spec:** [Согласованная спецификация](../spec.md).
 
@@ -39,3 +39,9 @@
 - Addressed expiry without an available Socket.io connection: registration, login and restoration expose the original JWT deadline in a documented `X-Auth-Expires-At` response header. Contracts validate the deadline and app schedules expiry immediately from HTTP; changing authentication clears the previous timer and generation checks ignore stale timers/socket events.
 - HTTP regression verifies registration deadline, original login deadline, no renewal on restoration and refusal at the same deadline without opening a socket (36 total boundary tests).
 - Parent manual evidence uses the Codex in-app browser: registration, understandable wrong-password error, correct login, reload, closing/reopening a tab, logout of two tabs, and independent login of the same user surviving logout using separate localhost/127.0.0.1 cookie origins. Chrome-specific/full-browser restart checks were not performed because Chrome DevTools had a profile conflict and native Chrome was in active use.
+
+### 2026-10-15 — итог интеграции
+
+- Реализация находится в ветке `codex/auth-lifecycle`. Ревью стандартов — без замечаний; замечание ревью требований об истечении без Socket.io исправлено и повторно проверено.
+- В интеграционном checkout прошёл `pnpm check`. Итоговый `docker compose up --build -d` собрал и запустил приложение; через nginx проверены HTTP-срок JWT, WebSocket handshake, отключение при выходе и действительность копии JWT после выхода.
+- Код готов; статус `ready-for-human` относится только к оставшемуся пункту полной ручной приёмки в Chrome с отдельным браузером и перезапуском браузера. Этот пункт не отмечен выполненным на основании проверок отдельных cookie-областей во встроенном Chromium.
