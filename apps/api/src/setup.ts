@@ -2,6 +2,7 @@ import { INestApplication } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { cleanupOpenApiDoc, ZodValidationPipe } from 'nestjs-zod';
+import { COOKIE } from './auth/auth.constants';
 import { ApiExceptionFilter } from './common/errors';
 export function setup(app: INestApplication) {
   app.setGlobalPrefix('api');
@@ -16,11 +17,7 @@ export function openApi(app: INestApplication) {
       new DocumentBuilder()
         .setTitle('Chat API')
         .setVersion('1.0')
-        .addCookieAuth(
-          'chat_token',
-          { type: 'apiKey', in: 'cookie' },
-          'chat_token',
-        )
+        .addCookieAuth(COOKIE, { type: 'apiKey', in: 'cookie' }, COOKIE)
         .build(),
     ),
   );

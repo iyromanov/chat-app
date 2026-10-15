@@ -6,11 +6,12 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import type { AuthRequest } from '../auth/auth-request';
+import { COOKIE } from '../auth/auth.constants';
 import { ErrorDto } from '../common/dto/error.dto';
 import { UsersService } from './users.service';
 import { UsersQueryDto, UsersPageDto } from './users.dto';
 @Controller('users')
-@ApiCookieAuth('chat_token')
+@ApiCookieAuth(COOKIE)
 export class UsersController {
   constructor(private readonly users: UsersService) {}
   @Get()

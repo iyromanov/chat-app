@@ -8,6 +8,7 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import type { AuthRequest } from '../auth/auth-request';
+import { COOKIE } from '../auth/auth.constants';
 import { ErrorDto } from '../common/dto/error.dto';
 import { ConversationsService } from './conversations.service';
 import {
@@ -17,7 +18,7 @@ import {
   ConversationsQueryDto,
 } from './conversations.dto';
 @Controller('conversations')
-@ApiCookieAuth('chat_token')
+@ApiCookieAuth(COOKIE)
 @ApiUnauthorizedResponse({ type: ErrorDto })
 @ApiBadRequestResponse({ type: ErrorDto })
 export class ConversationsController {
