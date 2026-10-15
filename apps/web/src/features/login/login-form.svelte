@@ -1,11 +1,14 @@
 <script lang="ts">
   import { loginSchema, type CurrentUser } from '@chat/contracts';
-  import { ApiError, type ApiClient } from '@shared/api';
+  import { ApiError, readAuthDeadline, type ApiClient } from '@shared/api';
   import { Alert, Button, Helper, Input, Label } from 'flowbite-svelte';
   let {
     api,
     onLoggedIn,
-  }: { api: ApiClient; onLoggedIn: (user: CurrentUser) => void } = $props();
+  }: {
+    api: ApiClient;
+    onLoggedIn: (user: CurrentUser, expiresAt: number) => void;
+  } = $props();
   let email = $state('');
   let password = $state('');
   let pending = $state(false);
@@ -27,12 +30,12 @@
     }
     pending = true;
     try {
-      const { data } = await api.AuthController_login({
+      const { data, response } = await api.AuthController_login({
         body: parsed.data,
       });
       if (data) {
         password = '';
-        onLoggedIn(data);
+        onLoggedIn(data, readAuthDeadline(response));
       }
     } catch (cause) {
       error =

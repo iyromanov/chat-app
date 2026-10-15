@@ -33,3 +33,9 @@
 - Updated contracts, OpenAPI/generated client and Vite/Compose Socket.io proxies.
 - Automated verification: `pnpm check`, `pnpm build`, `DOCKER_HOST=unix:///Users/igor/.docker/run/docker.sock pnpm test` (35 HTTP/Socket.io tests with MongoDB Testcontainers). HTTP logout red initially returned 404; JWT identity regression rejects equal cookies for simultaneous independent logins.
 - Manual acceptance is being checked separately by the parent agent; the last checkbox is intentionally open until evidence is available.
+
+### 2026-10-15 — review correction
+
+- Addressed expiry without an available Socket.io connection: registration, login and restoration expose the original JWT deadline in a documented `X-Auth-Expires-At` response header. Contracts validate the deadline and app schedules expiry immediately from HTTP; changing authentication clears the previous timer and generation checks ignore stale timers/socket events.
+- HTTP regression verifies registration deadline, original login deadline, no renewal on restoration and refusal at the same deadline without opening a socket (36 total boundary tests).
+- Parent manual evidence uses the Codex in-app browser: registration, understandable wrong-password error, correct login, reload, closing/reopening a tab, logout of two tabs, and independent login of the same user surviving logout using separate localhost/127.0.0.1 cookie origins. Chrome-specific/full-browser restart checks were not performed because Chrome DevTools had a profile conflict and native Chrome was in active use.

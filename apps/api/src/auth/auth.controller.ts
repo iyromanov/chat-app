@@ -22,7 +22,7 @@ import {
 import type { Response } from 'express';
 import { CONFIG, type Config } from '../common/config';
 import { ErrorDto } from '../common/dto/error.dto';
-import type { CurrentUser } from '@chat/contracts';
+import { AUTH_EXPIRES_HEADER, type CurrentUser } from '@chat/contracts';
 import { Public } from './public';
 import { LocalAuthGuard } from './local-auth.guard';
 import { LoginDto } from './dto/login.dto';
@@ -32,6 +32,15 @@ import type { AuthRequest } from './auth-request';
 import { RegistrationDto } from './dto/registration.dto';
 import { CurrentUserDto } from './dto/current-user.dto';
 
+const authHeaders = {
+  [AUTH_EXPIRES_HEADER]: {
+    description:
+      'Original JWT expiry; restoring authentication does not renew it',
+    required: true,
+    schema: { type: 'string', format: 'date-time' },
+  },
+};
+
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -40,15 +49,16 @@ export class AuthController {
   ) {}
   @Public()
   @Post('register')
-  @ApiCreatedResponse({ type: CurrentUserDto })
+  @ApiCreatedResponse({ type: CurrentUserDto, headers: authHeaders })
   @ApiBadRequestResponse({ type: ErrorDto })
   @ApiConflictResponse({ type: ErrorDto })
   async register(
     @Body() input: RegistrationDto,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const { user, token } = await this.auth.register(input);
+    const { user, token, expiresAt } = await this.auth.register(input);
     this.setCookie(response, token);
+    response.setHeader(AUTH_EXPIRES_HEADER, expiresAt.toISOString());
     return user;
   }
 
@@ -57,15 +67,16 @@ export class AuthController {
   @HttpCode(200)
   @UseGuards(LocalAuthGuard)
   @ApiBody({ type: LoginDto })
-  @ApiOkResponse({ type: CurrentUserDto })
+  @ApiOkResponse({ type: CurrentUserDto, headers: authHeaders })
   @ApiBadRequestResponse({ type: ErrorDto })
   @ApiUnauthorizedResponse({ type: ErrorDto })
   async login(
     @Req() request: AuthRequest,
     @Res({ passthrough: true }) response: Response,
   ): Promise<CurrentUser> {
-    const { user, token } = await this.auth.login(request.user);
+    const { user, token, expiresAt } = await this.auth.login(request.user);
     this.setCookie(response, token);
+    response.setHeader(AUTH_EXPIRES_HEADER, expiresAt.toISOString());
     return user;
   }
 
@@ -98,9 +109,16 @@ export class AuthController {
 
   @Get('me')
   @ApiCookieAuth(COOKIE)
-  @ApiOkResponse({ type: CurrentUserDto })
+  @ApiOkResponse({ type: CurrentUserDto, headers: authHeaders })
   @ApiUnauthorizedResponse({ type: ErrorDto })
-  me(@Req() request: AuthRequest) {
+  me(
+    @Req() request: AuthRequest,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    response.setHeader(
+      AUTH_EXPIRES_HEADER,
+      request.auth.expiresAt.toISOString(),
+    );
     return request.user;
   }
 }

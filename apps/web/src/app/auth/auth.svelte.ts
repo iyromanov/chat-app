@@ -1,10 +1,6 @@
 import { io, type Socket } from 'socket.io-client';
-import {
-  authReadySchema,
-  type ServerEvents,
-  type CurrentUser,
-} from '@chat/contracts';
-import { createApi, ApiError } from '@shared/api';
+import { type ServerEvents, type CurrentUser } from '@chat/contracts';
+import { createApi, readAuthDeadline, ApiError } from '@shared/api';
 
 type AuthState =
   | { status: 'loading' | 'anonymous'; user: null }
@@ -27,22 +23,21 @@ class Auth {
 
   readonly api = createApi({ onUnauthorized: this.anonymous });
 
-  registered = (user: CurrentUser) => {
-    this.socket?.disconnect();
+  registered = (user: CurrentUser, expiresAt: number) => {
+    this.anonymous();
+    const generation = this.generation;
+    if (expiresAt <= Date.now()) return;
+    this.expiryTimer = setTimeout(() => {
+      if (generation === this.generation) this.anonymous();
+    }, expiresAt - Date.now());
     this.state = { status: 'authenticated', user };
     this.socket = io({ withCredentials: true });
-    this.socket.on('auth:ended', this.anonymous);
-    this.socket.on('auth:ready', (data) => {
-      const parsed = authReadySchema.safeParse(data);
-      if (!parsed.success) return;
-      clearTimeout(this.expiryTimer);
-      this.expiryTimer = setTimeout(
-        this.anonymous,
-        Math.max(0, Date.parse(parsed.data.expiresAt) - Date.now()),
-      );
+    this.socket.on('auth:ended', () => {
+      if (generation === this.generation) this.anonymous();
     });
     this.socket.on('connect_error', () => {
-      void this.api.AuthController_me().catch(() => {});
+      if (generation === this.generation)
+        void this.api.AuthController_me().catch(() => {});
     });
   };
 
@@ -80,9 +75,9 @@ class Auth {
     const generation = this.generation;
     this.state = { status: 'loading', user: null };
     try {
-      const { data } = await this.api.AuthController_me();
+      const { data, response } = await this.api.AuthController_me();
       if (generation !== this.generation) return;
-      if (data) this.registered(data);
+      if (data) this.registered(data, readAuthDeadline(response));
     } catch (error) {
       if (generation !== this.generation) return;
       if (error instanceof ApiError && error.body.code === 'UNAUTHORIZED')

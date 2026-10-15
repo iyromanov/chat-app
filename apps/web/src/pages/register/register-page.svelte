@@ -9,7 +9,7 @@
     onSignIn,
   }: {
     api: ApiClient;
-    onRegistered: (user: CurrentUser) => void;
+    onRegistered: (user: CurrentUser, expiresAt: number) => void;
     onSignIn: () => void;
   } = $props();
 </script>

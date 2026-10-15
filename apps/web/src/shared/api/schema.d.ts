@@ -120,6 +120,8 @@ export interface operations {
         responses: {
             201: {
                 headers: {
+                    /** @description Original JWT expiry; restoring authentication does not renew it */
+                    "X-Auth-Expires-At": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -159,6 +161,8 @@ export interface operations {
         responses: {
             200: {
                 headers: {
+                    /** @description Original JWT expiry; restoring authentication does not renew it */
+                    "X-Auth-Expires-At": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -219,6 +223,8 @@ export interface operations {
         responses: {
             200: {
                 headers: {
+                    /** @description Original JWT expiry; restoring authentication does not renew it */
+                    "X-Auth-Expires-At": string;
                     [name: string]: unknown;
                 };
                 content: {

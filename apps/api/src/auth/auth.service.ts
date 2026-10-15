@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import type { CurrentUser, Login, Registration } from '@chat/contracts';
+import { LIFETIME } from './auth.constants';
 import { Clock } from '../common/clock';
 import { UsersService } from '../users/users.service';
 
@@ -35,12 +36,14 @@ export class AuthService {
   }
 
   async login(user: CurrentUser) {
+    const issuedAt = Math.floor(this.clock.now().getTime() / 1000);
     return {
+      expiresAt: new Date((issuedAt + LIFETIME) * 1000),
       user,
       token: await this.jwt.signAsync({
         sub: user.id,
         jti: randomUUID(),
-        iat: Math.floor(this.clock.now().getTime() / 1000),
+        iat: issuedAt,
       }),
     };
   }

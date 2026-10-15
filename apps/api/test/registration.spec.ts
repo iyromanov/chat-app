@@ -91,6 +91,9 @@ describe('Authentication HTTP boundary (real MongoDB)', () => {
       'id',
       'username',
     ]);
+    expect(response.headers['x-auth-expires-at']).toBe(
+      '2026-10-15T12:00:00.000Z',
+    );
     const cookie = response.headers['set-cookie'][0];
     expect(cookie).toContain('HttpOnly');
     expect(cookie).toContain('Max-Age=86400');
@@ -239,6 +242,32 @@ describe('Authentication HTTP boundary (real MongoDB)', () => {
     const response = await login(body).expect(400);
     expect(errorSchema.parse(response.body).code).toBe('VALIDATION_ERROR');
     expect(response.headers['set-cookie']).toBeUndefined();
+  });
+
+  it('returns the original JWT deadline over HTTP without requiring a socket or renewing on restore', async () => {
+    now = new Date('2026-11-01T12:00:00.500Z');
+    const response = await login({
+      email: input.email,
+      password: input.password,
+    }).expect(200);
+    expect(response.headers['x-auth-expires-at']).toBe(
+      '2026-11-02T12:00:00.000Z',
+    );
+    const cookie = response.headers['set-cookie'][0];
+    advance(3600 * 1000);
+    const restored = await request(app.getHttpServer())
+      .get('/api/auth/me')
+      .set('Cookie', cookie)
+      .expect(200);
+    expect(restored.headers['x-auth-expires-at']).toBe(
+      '2026-11-02T12:00:00.000Z',
+    );
+    expect(restored.headers['set-cookie']).toBeUndefined();
+    advance(23 * 3600 * 1000);
+    await request(app.getHttpServer())
+      .get('/api/auth/me')
+      .set('Cookie', cookie)
+      .expect(401);
   });
 
   it('logs out by clearing the cookie while a copied JWT remains valid', async () => {

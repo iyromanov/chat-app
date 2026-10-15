@@ -16,9 +16,9 @@
   const auth = createAuth();
   let registering = $state(false);
   let logoutError = $state('');
-  function signedIn(user: CurrentUser) {
+  function signedIn(user: CurrentUser, expiresAt: number) {
     registering = false;
-    auth.registered(user);
+    auth.registered(user, expiresAt);
   }
   async function logout() {
     logoutError = '';

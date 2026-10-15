@@ -1,7 +1,11 @@
 import createClient from 'openapi-fetch';
 import type { paths } from './schema';
 import { createOperations } from './operations';
-import { errorSchema } from '@chat/contracts';
+import {
+  AUTH_EXPIRES_HEADER,
+  authDeadlineSchema,
+  errorSchema,
+} from '@chat/contracts';
 export class ApiError extends Error {
   constructor(
     public readonly body: {
@@ -46,3 +50,10 @@ export function createApi(options: {
   return createOperations(client);
 }
 export type ApiClient = ReturnType<typeof createApi>;
+
+export function readAuthDeadline(response: Response): number {
+  const deadline = authDeadlineSchema.parse(
+    response.headers.get(AUTH_EXPIRES_HEADER),
+  );
+  return Date.parse(deadline);
+}

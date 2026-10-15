@@ -38,3 +38,6 @@ export interface ServerEvents {
   'auth:ready': (data: z.infer<typeof authReadySchema>) => void;
   'auth:ended': () => void;
 }
+
+export const AUTH_EXPIRES_HEADER = 'X-Auth-Expires-At';
+export const authDeadlineSchema = z.iso.datetime();
