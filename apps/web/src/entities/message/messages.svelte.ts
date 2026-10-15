@@ -5,7 +5,7 @@ class Messages {
   private generation = 0;
   private refreshPending = false;
   private initialized = false;
-  private synchronizedId: string | null = null;
+  private oldestLoadedId: string | null = null;
 
   conversationId = $state<string | null>(null);
   items = $state.raw<Message[]>([]);
@@ -47,7 +47,7 @@ class Messages {
     this.failedLoadMore = false;
     this.refreshPending = false;
     this.initialized = false;
-    this.synchronizedId = null;
+    this.oldestLoadedId = null;
   };
 
   load = async (more = false) => {
@@ -63,27 +63,28 @@ class Messages {
     this.error = '';
     try {
       const recovering = !more && this.initialized;
-      const after = recovering ? (this.synchronizedId ?? 'start') : undefined;
+      const boundaryId = this.oldestLoadedId;
+      let reachedBoundary = false;
       let cursor = more ? this.nextCursor : null;
-      let synchronizedId = this.synchronizedId;
+      let oldestLoadedId = this.oldestLoadedId;
       do {
         const { data } = await this.api.messages.list(conversationId, {
           cursor: cursor ?? undefined,
-          after,
         });
         if (generation !== this.generation || !data) return;
         for (const message of data.items) {
           this.upsert(message);
           this.onLoaded(message);
         }
-        if (!recovering) this.nextCursor = data.nextCursor;
-        if (!more) synchronizedId = data.items.at(-1)?.id ?? synchronizedId;
+        oldestLoadedId = data.items[0]?.id ?? oldestLoadedId;
+        reachedBoundary ||= data.items.some(
+          (message) => message.id === boundaryId,
+        );
         cursor = data.nextCursor;
-      } while (recovering && cursor);
-      if (!more) {
-        this.synchronizedId = synchronizedId;
-        this.initialized = true;
-      }
+      } while (recovering && cursor && !reachedBoundary);
+      this.oldestLoadedId = oldestLoadedId;
+      this.nextCursor = cursor;
+      if (!more) this.initialized = true;
     } catch {
       if (generation === this.generation) {
         this.failedLoadMore = more;
