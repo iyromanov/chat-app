@@ -2,7 +2,10 @@ import { Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Message } from '@chat/contracts';
 import { Model, Types } from 'mongoose';
-import { MessageActivityService } from '../messages/message-activity.service';
+import {
+  MessageActivityService,
+  type MessageActivityRecord,
+} from '../messages/message-activity.service';
 import { Clock } from '../common/clock';
 import { isDuplicateKeyError } from '../common/mongo-errors';
 import { Conversation } from './conversation.schema';
@@ -72,9 +75,7 @@ export class ConversationsRepository implements OnModuleInit {
     after?: ConversationPosition,
   ): Promise<ConversationRecord[]> {
     const rows = await this.conversations
-      .aggregate<
-        StoredConversation & { lastMessage: Message | null; activityAt: Date }
-      >([
+      .aggregate<StoredConversation & MessageActivityRecord>([
         { $match: { participants: userId } },
         ...this.messageActivity.latestForConversationPipeline(),
         ...(after
@@ -98,8 +99,7 @@ export class ConversationsRepository implements OnModuleInit {
       .exec();
     return rows.map((row) => ({
       ...toRecord(row),
-      lastMessage: row.lastMessage,
-      activityAt: row.activityAt,
+      ...this.messageActivity.presentActivity(row),
     }));
   }
 
@@ -107,17 +107,14 @@ export class ConversationsRepository implements OnModuleInit {
     conversation: ConversationRecord,
   ): Promise<ConversationRecord> {
     const [row] = await this.conversations
-      .aggregate<
-        StoredConversation & { lastMessage: Message | null; activityAt: Date }
-      >([
+      .aggregate<StoredConversation & MessageActivityRecord>([
         { $match: { _id: new Types.ObjectId(conversation.id) } },
         ...this.messageActivity.latestForConversationPipeline(),
       ])
       .exec();
     return {
       ...conversation,
-      lastMessage: row.lastMessage,
-      activityAt: row.activityAt,
+      ...this.messageActivity.presentActivity(row),
     };
   }
 
