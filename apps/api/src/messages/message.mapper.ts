@@ -1,0 +1,15 @@
+import type { Message as PublicMessage } from '@chat/contracts';
+import type { Types } from 'mongoose';
+import type { Message } from './message.schema';
+
+export type StoredMessage = Message & { _id: Types.ObjectId };
+export function presentMessage(row: StoredMessage): PublicMessage {
+  return {
+    id: row._id.toString(),
+    conversationId: row.conversationId,
+    senderId: row.senderId,
+    text: row.text,
+    attemptId: row.attemptId,
+    createdAt: row.createdAt.toISOString(),
+  };
+}

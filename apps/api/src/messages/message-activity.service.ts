@@ -1,7 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, type PipelineStage } from 'mongoose';
+import type { Message as PublicMessage } from '@chat/contracts';
 import { Message } from './message.schema';
+import { presentMessage, type StoredMessage } from './message.mapper';
+
+export type MessageActivityRecord = {
+  lastMessage: StoredMessage | null;
+  activityAt: Date;
+};
 
 /** Supplies the indexed latest-message join without exposing the owned model. */
 @Injectable()
@@ -23,22 +30,6 @@ export class MessageActivityService {
             },
             { $sort: { createdAt: -1, _id: -1 } },
             { $limit: 1 },
-            {
-              $project: {
-                _id: 0,
-                id: { $toString: '$_id' },
-                conversationId: 1,
-                senderId: 1,
-                text: 1,
-                attemptId: 1,
-                createdAt: {
-                  $dateToString: {
-                    date: '$createdAt',
-                    format: '%Y-%m-%dT%H:%M:%S.%LZ',
-                  },
-                },
-              },
-            },
           ],
           as: 'latest',
         },
@@ -47,18 +38,20 @@ export class MessageActivityService {
         $set: {
           lastMessage: { $ifNull: [{ $first: '$latest' }, null] },
           activityAt: {
-            $ifNull: [
-              {
-                $dateFromString: {
-                  dateString: { $first: '$latest.createdAt' },
-                },
-              },
-              '$createdAt',
-            ],
+            $ifNull: [{ $first: '$latest.createdAt' }, '$createdAt'],
           },
         },
       },
       { $unset: 'latest' },
     ];
+  }
+  presentActivity(row: MessageActivityRecord): {
+    lastMessage: PublicMessage | null;
+    activityAt: Date;
+  } {
+    return {
+      lastMessage: row.lastMessage ? presentMessage(row.lastMessage) : null,
+      activityAt: row.activityAt,
+    };
   }
 }

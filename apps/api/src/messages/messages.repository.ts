@@ -1,21 +1,11 @@
 import { ConflictException, Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model } from 'mongoose';
 import type { Message as PublicMessage, SendMessage } from '@chat/contracts';
 import { isDuplicateKeyError } from '../common/mongo-errors';
 import { Clock } from '../common/clock';
 import { Message } from './message.schema';
-type StoredMessage = Message & { _id: Types.ObjectId };
-export function presentMessage(row: StoredMessage): PublicMessage {
-  return {
-    id: row._id.toString(),
-    conversationId: row.conversationId,
-    senderId: row.senderId,
-    text: row.text,
-    attemptId: row.attemptId,
-    createdAt: row.createdAt.toISOString(),
-  };
-}
+import { presentMessage } from './message.mapper';
 @Injectable()
 export class MessagesRepository implements OnModuleInit {
   constructor(
