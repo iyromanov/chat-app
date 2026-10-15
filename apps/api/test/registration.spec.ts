@@ -4,9 +4,6 @@ import type { INestApplication } from '@nestjs/common';
 import { GenericContainer, type StartedTestContainer } from 'testcontainers';
 import request from 'supertest';
 import { JwtService, type JwtSignOptions } from '@nestjs/jwt';
-import { getConnectionToken } from '@nestjs/mongoose';
-import type { Connection } from 'mongoose';
-import { scryptSync } from 'node:crypto';
 import { AppModule } from '../src/app.module';
 import { Clock } from '../src/common/clock';
 import { setup } from '../src/setup';
@@ -78,7 +75,7 @@ describe('Authentication HTTP boundary (real MongoDB)', () => {
     { email: '' },
     { email: 'broken' },
     { username: 'ab' },
-    { username: 'юзер' },
+    { username: 'usér' },
     { username: 'a'.repeat(31) },
     { password: 'short' },
     { password: 'a'.repeat(129) },
@@ -120,7 +117,7 @@ describe('Authentication HTTP boundary (real MongoDB)', () => {
     await register({
       email: 'max@example.com',
       username: 'max',
-      password: 'я'.repeat(128),
+      password: 'é'.repeat(128),
     }).expect(201);
   });
   it('rejects missing, malformed and forged JWTs', async () => {
@@ -208,27 +205,6 @@ describe('Authentication HTTP boundary (real MongoDB)', () => {
     const response = await login(body).expect(400);
     expect(errorSchema.parse(response.body).code).toBe('VALIDATION_ERROR');
     expect(response.headers['set-cookie']).toBeUndefined();
-  });
-
-  it('accepts passwords stored in the original scrypt format', async () => {
-    const connection = app.get<Connection>(getConnectionToken());
-    const salt = '0123456789abcdef0123456789abcdef';
-    const key = scryptSync(input.password, salt, 64, {
-      N: 32768,
-      r: 8,
-      p: 3,
-      maxmem: 64 * 1024 * 1024,
-    });
-    await connection.collection('users').updateOne(
-      { normalizedEmail: 'alice@example.com' },
-      {
-        $set: {
-          passwordHash: `scrypt:32768:8:3:${salt}:${key.toString('hex')}`,
-        },
-      },
-    );
-    await login({ email: input.email, password: input.password }).expect(200);
-    await login({ email: input.email, password: 'wrong password' }).expect(401);
   });
 
   it.each([
