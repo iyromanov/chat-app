@@ -2,13 +2,17 @@ import type { PublicUser } from '@chat/contracts';
 import type { ApiClient } from '@shared/api';
 
 class UserSearch {
-  search = $state('');
-  items = $state.raw<PublicUser[]>([]);
-  nextCursor = $state<string | null>(null);
-  loading = $state(false);
-  error = $state('');
-
   private generation = 0;
+
+  search = $state('');
+
+  items = $state.raw<PublicUser[]>([]);
+
+  nextCursor = $state<string | null>(null);
+
+  loading = $state(false);
+
+  error = $state('');
 
   constructor(private readonly api: () => ApiClient) {}
 
@@ -31,13 +35,9 @@ class UserSearch {
     this.loading = true;
     this.error = '';
     try {
-      const { data } = await this.api().UsersController_list({
-        params: {
-          query: {
-            search: this.search,
-            cursor: more ? this.nextCursor! : undefined,
-          },
-        },
+      const { data } = await this.api().users.list({
+        search: this.search,
+        cursor: more ? this.nextCursor! : undefined,
       });
       if (generation !== this.generation || !data) return;
       this.items = [

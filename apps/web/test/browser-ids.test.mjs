@@ -46,10 +46,12 @@ test('sending and logout work without crypto.randomUUID', async () => {
     const saved = [];
     const composer = createMessageComposer(
       () => ({
-        MessagesController_send: async ({ body }) => {
-          requests.push(body);
-          if (requests.length === 1) throw new Error('Response lost');
-          return { data: { id: 'saved-message', ...body } };
+        messages: {
+          send: async (_conversationId, body) => {
+            requests.push(body);
+            if (requests.length === 1) throw new Error('Response lost');
+            return { data: { id: 'saved-message', ...body } };
+          },
         },
       }),
       (message) => saved.push(message),
@@ -71,7 +73,7 @@ test('sending and logout work without crypto.randomUUID', async () => {
       '/src/app/auth/auth.svelte.ts',
     );
     const auth = createAuth(
-      () => ({ AuthController_logout: async () => ({}) }),
+      () => ({ auth: { logout: async () => ({}) } }),
       () => {},
     );
     await auth.logout();

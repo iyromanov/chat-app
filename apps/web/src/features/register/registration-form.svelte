@@ -32,9 +32,8 @@
     }
     pending = true;
     try {
-      const { data, response } = await api.AuthController_register({
-        body: parsed.data,
-      });
+      const response = await api.auth.register(parsed.data);
+      const { data } = response;
       if (data) {
         password = '';
         onRegistered(data, readAuthDeadline(response));

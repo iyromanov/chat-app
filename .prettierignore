@@ -1,4 +1,4 @@
 pnpm-lock.yaml
 apps/api/openapi.json
-apps/web/src/shared/api/schema.d.ts
+apps/web/src/shared/api/generated.ts
 .scratch/

@@ -28,9 +28,7 @@
     loading = true;
     error = '';
     try {
-      const { data } = await api.ConversationsController_start({
-        body: { userId },
-      });
+      const { data } = await api.conversations.start({ userId });
       if (data && active) onStarted(data);
     } catch (reason) {
       if (active)

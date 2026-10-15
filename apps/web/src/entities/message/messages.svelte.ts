@@ -2,14 +2,14 @@ import type { Message } from '@chat/contracts';
 import type { ApiClient } from '@shared/api';
 
 class Messages {
+  private generation = 0;
+  private refreshPending = false;
+
   conversationId = $state<string | null>(null);
   items = $state.raw<Message[]>([]);
   nextCursor = $state<string | null>(null);
   loading = $state(false);
   error = $state('');
-
-  private generation = 0;
-  private refreshPending = false;
 
   constructor(private readonly api: ApiClient) {}
 
@@ -53,11 +53,8 @@ class Messages {
     this.loading = true;
     this.error = '';
     try {
-      const { data } = await this.api.MessagesController_list({
-        params: {
-          path: { conversationId },
-          query: { cursor: more ? this.nextCursor! : undefined },
-        },
+      const { data } = await this.api.messages.list(conversationId, {
+        cursor: more ? this.nextCursor! : undefined,
       });
       if (generation !== this.generation || !data) return;
       for (const message of data.items) this.upsert(message);

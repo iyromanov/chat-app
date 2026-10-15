@@ -31,9 +31,8 @@
     }
     pending = true;
     try {
-      const { data, response } = await api.AuthController_login({
-        body: parsed.data,
-      });
+      const response = await api.auth.login(parsed.data);
+      const { data } = response;
       if (data) {
         password = '';
         onLoggedIn(data, readAuthDeadline(response));

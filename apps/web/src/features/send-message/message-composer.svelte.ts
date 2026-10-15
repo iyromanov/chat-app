@@ -44,10 +44,7 @@ class MessageComposer {
     draft.sending = true;
     draft.error = '';
     try {
-      const { data } = await this.api().MessagesController_send({
-        params: { path: { conversationId } },
-        body: attempt,
-      });
+      const { data } = await this.api().messages.send(conversationId, attempt);
       if (!data) throw new Error('Missing saved message');
       if (this.disposed) return;
       this.onSent(data);

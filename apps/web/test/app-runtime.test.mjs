@@ -171,7 +171,7 @@ test('a new login isolates late HTTP failures, logout responses and store loads'
       json(response, { code: 'UNAUTHORIZED', message: 'Expired' }, 401),
     );
   });
-  const rejected = assert.rejects(previous.api.AuthController_me());
+  const rejected = assert.rejects(previous.api.auth.me());
   await meStarted.promise;
 
   const logoutStarted = deferred();
@@ -342,4 +342,83 @@ test('authentication expiry closes the connection and clears user data', async (
   assert.equal(runtime.context, null);
   assert.equal(runtime.auth.state.status, 'anonymous');
   assert.deepEqual(context.chat.conversations.items, []);
+});
+
+test('API client serializes query, path and JSON body and preserves auth headers', async () => {
+  const { createApi, readAuthDeadline } = await modules.ssrLoadModule(
+    '/src/shared/api/index.ts',
+  );
+  const requests = [];
+  const deadline = '2026-10-15T12:00:00.000Z';
+  const api = createApi({
+    baseUrl: 'https://chat.example',
+    onUnauthorized: () => assert.fail('Unexpected unauthorized response'),
+    fetch: async (url, options) => {
+      requests.push({ url, options });
+      return globalThis.Response.json(user, {
+        headers: { 'X-Auth-Expires-At': deadline },
+      });
+    },
+  });
+  const credentials = { email: 'alice@example.com', password: 'password123' };
+  const response = await api.auth.login(credentials);
+  assert.deepEqual(response.data, user);
+  assert.equal(readAuthDeadline(response), Date.parse(deadline));
+  await api.users.list({ search: 'A & B', cursor: 'next+page=' });
+  const body = { text: 'Hello\nWorld', attemptId: 'send-once' };
+  await api.messages.send(conversation.id, body);
+  await api.messages.list(conversation.id, { cursor: undefined });
+  assert.deepEqual(
+    requests.map(({ url }) => url),
+    [
+      'https://chat.example/api/auth/login',
+      'https://chat.example/api/users?search=A%20%26%20B&cursor=next%2Bpage%3D',
+      `https://chat.example/api/conversations/${conversation.id}/messages`,
+      `https://chat.example/api/conversations/${conversation.id}/messages`,
+    ],
+  );
+  assert.ok(requests.every(({ options }) => options.credentials === 'include'));
+  assert.equal(requests[0].options.method, 'POST');
+  assert.equal(requests[0].options.headers['Content-Type'], 'application/json');
+  assert.deepEqual(JSON.parse(requests[0].options.body), credentials);
+  assert.deepEqual(JSON.parse(requests[2].options.body), body);
+  assert.equal(requests[3].options.method, 'GET');
+});
+
+test('API client handles empty logout responses and normalizes HTTP errors', async () => {
+  const { createApi, ApiError } = await modules.ssrLoadModule(
+    '/src/shared/api/index.ts',
+  );
+  let unauthorized = 0;
+  let response = new globalThis.Response(null, { status: 204 });
+  const api = createApi({
+    onUnauthorized: () => unauthorized++,
+    fetch: async () => response,
+  });
+  assert.equal((await api.auth.logout()).status, 204);
+  const body = {
+    code: 'VALIDATION_ERROR',
+    message: 'Invalid input',
+    fields: { email: ['Invalid email'] },
+  };
+  response = globalThis.Response.json(body, { status: 400 });
+  await assert.rejects(api.auth.login({ email: '', password: '' }), (error) => {
+    assert.ok(error instanceof ApiError);
+    assert.deepEqual(error.body, body);
+    return true;
+  });
+  assert.equal(unauthorized, 0);
+  response = globalThis.Response.json(
+    { code: 'UNAUTHORIZED', message: 'Expired' },
+    { status: 401 },
+  );
+  await assert.rejects(api.auth.me(), ApiError);
+  assert.equal(unauthorized, 1);
+  response = new globalThis.Response('Unavailable', { status: 503 });
+  await assert.rejects(api.auth.me(), (error) => {
+    assert.ok(error instanceof ApiError);
+    assert.equal(error.body.code, 'NETWORK_ERROR');
+    return true;
+  });
+  assert.equal(unauthorized, 1);
 });

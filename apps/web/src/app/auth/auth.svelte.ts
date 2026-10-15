@@ -11,11 +11,8 @@ type AuthState =
 
 class Auth {
   private expiryTimer?: ReturnType<typeof setTimeout>;
-
   private generation = 0;
-
   private loginAttempt = 0;
-
   private disposed = false;
 
   state = $state.raw<AuthState>({ status: 'loading', user: null });
@@ -49,7 +46,7 @@ class Auth {
     if (this.disposed) return;
     const loginAttempt = this.loginAttempt;
     try {
-      await this.getApi().AuthController_logout();
+      await this.getApi().auth.logout();
       if (loginAttempt !== this.loginAttempt) return;
       localStorage.setItem(LOGOUT_STORAGE_KEY, createRandomId());
       this.invalidate();
@@ -68,7 +65,7 @@ class Auth {
   revalidate = async () => {
     if (this.state.status === 'authenticated')
       await this.getApi()
-        .AuthController_me()
+        .auth.me()
         .catch(() => {});
   };
 
@@ -86,9 +83,10 @@ class Auth {
     const generation = this.generation;
     this.state = { status: 'loading', user: null };
     try {
-      const { data, response } = await this.getApi().AuthController_me();
+      const response = await this.getApi().auth.me();
       if (generation !== this.generation) return;
-      if (data) this.signedIn(data, readAuthDeadline(response));
+      if (response.data)
+        this.signedIn(response.data, readAuthDeadline(response));
     } catch (error) {
       if (generation !== this.generation) return;
       if (error instanceof ApiError && error.body.code === 'UNAUTHORIZED')

@@ -1,6 +1,4 @@
-import createClient from 'openapi-fetch';
-import type { paths } from './schema';
-import { createOperations } from './operations';
+import { Api } from './generated';
 import {
   AUTH_EXPIRES_HEADER,
   authDeadlineSchema,
@@ -8,7 +6,7 @@ import {
 } from '@chat/contracts';
 export class ApiError extends Error {
   constructor(
-    public readonly body: {
+    readonly body: {
       code: string;
       message: string;
       fields?: Record<string, string[]>;
@@ -23,13 +21,11 @@ export function createApi(options: {
   fetch?: typeof fetch;
   onUnauthorized: () => void;
 }) {
-  const client = createClient<paths>({
+  const client = new Api({
     baseUrl: options.baseUrl ?? '',
-    fetch: options.fetch,
-    credentials: 'include',
-  });
-  client.use({
-    async onResponse({ response }) {
+    baseApiParams: { credentials: 'include' },
+    customFetch: async (...args) => {
+      const response = await (options.fetch ?? fetch)(...args);
       if (response.ok) return response;
       if (response.status === 401) options.onUnauthorized();
       const parsed = errorSchema.safeParse(
@@ -48,7 +44,7 @@ export function createApi(options: {
       );
     },
   });
-  return createOperations(client);
+  return client;
 }
 
 export type ApiClient = ReturnType<typeof createApi>;

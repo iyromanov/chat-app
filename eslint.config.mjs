@@ -1,12 +1,19 @@
 import js from '@eslint/js';
+import stylistic from '@stylistic/eslint-plugin';
+import { defineConfig } from 'eslint/config';
 import ts from 'typescript-eslint';
 import prettier from 'eslint-config-prettier';
 import web from './apps/web/eslint.config.mjs';
 import contracts from './packages/contracts/eslint.config.mjs';
 
-export default ts.config(
+export default defineConfig(
   {
-    ignores: ['**/node_modules/**', '**/dist/**', '**/build/**'],
+    ignores: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/build/**',
+      '**/.svelte-kit/**',
+    ],
   },
   js.configs.recommended,
   ...ts.configs.recommended,
@@ -15,8 +22,15 @@ export default ts.config(
   prettier,
   {
     files: ['apps/web/**/*.{ts,svelte}'],
+    plugins: {
+      '@stylistic': stylistic,
+    },
     rules: {
-      'lines-between-class-members': ['error', 'always'],
+      '@stylistic/lines-between-class-members': [
+        'error',
+        'always',
+        { exceptAfterSingleLine: true },
+      ],
     },
   },
   {

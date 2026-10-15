@@ -1,4 +1,5 @@
 import ts from 'typescript-eslint';
+import stylistic from '@stylistic/eslint-plugin';
 import svelte from 'eslint-plugin-svelte';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -73,8 +74,19 @@ const architecture = {
 const basePath = path.dirname(fileURLToPath(import.meta.url));
 
 export default [
-  { ignores: ['**/.svelte-kit/**', 'src/shared/api/schema.d.ts'] },
+  { ignores: ['**/.svelte-kit/**', 'src/shared/api/generated.ts'] },
   ...svelte.configs['flat/recommended'],
+  {
+    files: ['**/*.{ts,svelte}'],
+    plugins: { '@stylistic': stylistic },
+    rules: {
+      '@stylistic/lines-between-class-members': [
+        'error',
+        'always',
+        { exceptAfterSingleLine: true },
+      ],
+    },
+  },
   {
     files: ['**/*.svelte'],
     languageOptions: { parserOptions: { parser: ts.parser } },

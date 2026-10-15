@@ -58,7 +58,7 @@ Testcontainers автоматически создаёт и удаляет от�
 - `apps/web`: SvelteKit; маршруты и авторизация в app, экран в pages, форма в features, HTTP-клиент в shared; готовые UI-компоненты импортируются из `flowbite-svelte`.
 - `packages/contracts`: Zod-контракты без зависимости от фреймворков.
 
-`apps/api/openapi.json`, `apps/web/src/shared/api/schema.d.ts` и `apps/web/src/shared/api/operations.ts` генерируются командой `pnpm generate`; не редактируйте их вручную. Прикладной код вызывает методы по `operationId` (например, `api.AuthController_me()`); маршруты и HTTP-методы задаёт OpenAPI. ESLint проверяет направления импортов FSD и публичные интерфейсы срезов, а также изоляцию contracts. Пользовательское состояние создаётся для экземпляра страницы; сервер не рендерит приватные данные.
+`apps/api/openapi.json`, `apps/web/src/shared/api/generated.ts` генерируются командой `pnpm generate`; не редактируйте их вручную. Типы и Fetch-клиент создаёт `swagger-typescript-api`. Прикладной код вызывает методы по `operationId` (например, `api.auth.me()`); маршруты и HTTP-методы задаёт OpenAPI. ESLint проверяет направления импортов FSD и публичные интерфейсы срезов, а также изоляцию contracts. Пользовательское состояние создаётся для экземпляра страницы; сервер не рендерит приватные данные.
 
 Аутентификация API использует `@nestjs/passport`: `passport-local` для `POST /api/auth/login` (email и пароль) и `passport-jwt` для проверки `chat_token` в HttpOnly cookie. JWT выпускается через `@nestjs/jwt`; подпись, issuer, audience и срок проверяются Passport с заменяемыми часами. Хеширование и проверка паролей используют `scrypt-kdf`. Вход возвращает тот же публичный профиль, что регистрация; неверные данные дают 401, невалидное тело — 400.
 
