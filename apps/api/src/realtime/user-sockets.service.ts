@@ -1,6 +1,7 @@
 import type { ServerEvents } from '@chat/contracts';
 import { Injectable } from '@nestjs/common';
 import type { Server, Socket } from 'socket.io';
+import { roomKeys } from './room-keys';
 
 @Injectable()
 export class UserSocketsService {
@@ -11,7 +12,7 @@ export class UserSocketsService {
   }
 
   joinUser(socket: Socket, userId: string): void | Promise<void> {
-    return socket.join(this.userRoom(userId));
+    return socket.join(roomKeys.user(userId));
   }
 
   emitToUser<Event extends keyof ServerEvents>(
@@ -19,10 +20,6 @@ export class UserSocketsService {
     event: Event,
     ...args: Parameters<ServerEvents[Event]>
   ): void {
-    this.server.to(this.userRoom(userId)).emit(event, ...args);
-  }
-
-  private userRoom(userId: string): string {
-    return `user:${userId}`;
+    this.server.to(roomKeys.user(userId)).emit(event, ...args);
   }
 }

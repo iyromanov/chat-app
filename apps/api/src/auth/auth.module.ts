@@ -8,6 +8,7 @@ import { UsersModule } from '../users/users.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { AuthCookieService } from './auth-cookie.service';
 import { AuthGuard } from './auth.guard';
 import { JwtStrategy } from './jwt.strategy';
 import { LocalStrategy } from './local.strategy';
@@ -35,6 +36,7 @@ import { JWT_AUDIENCE, JWT_ISSUER, LIFETIME } from './auth.constants';
   controllers: [AuthController],
   providers: [
     AuthService,
+    AuthCookieService,
     AuthGateway,
     AuthGuard,
     { provide: APP_GUARD, useExisting: AuthGuard },

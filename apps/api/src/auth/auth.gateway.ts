@@ -9,6 +9,7 @@ import cookieParser from 'cookie-parser';
 import passport from 'passport';
 import type { Response, NextFunction } from 'express';
 import { Clock } from '../common/clock';
+import { roomKeys } from '../realtime/room-keys';
 import { UserSocketsService } from '../realtime/user-sockets.service';
 import type { AuthRequest } from './auth-request';
 
@@ -46,7 +47,7 @@ export class AuthGateway implements OnGatewayInit {
 
   handleConnection(socket: Socket) {
     const { loginId, expiresAt } = socket.data.auth as AuthRequest['auth'];
-    void socket.join(`login:${loginId}`);
+    void socket.join(roomKeys.login(loginId));
     void this.userSockets.joinUser(socket, socket.data.userId as string);
     socket.emit('auth:ready', { expiresAt: expiresAt.toISOString() });
     const cancel = this.clock.scheduleAt(expiresAt, () => {
@@ -57,7 +58,7 @@ export class AuthGateway implements OnGatewayInit {
   }
 
   logout(loginId: string) {
-    const room = `login:${loginId}`;
+    const room = roomKeys.login(loginId);
     this.server.to(room).emit('auth:ended');
     this.server.in(room).disconnectSockets(true);
   }

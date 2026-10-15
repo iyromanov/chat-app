@@ -2,7 +2,6 @@ import {
   Body,
   Controller,
   Get,
-  Inject,
   HttpCode,
   Post,
   Req,
@@ -20,14 +19,14 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import type { Response } from 'express';
-import { CONFIG, type Config } from '../common/config';
 import { ErrorDto } from '../common/dto/error.dto';
 import { AUTH_EXPIRES_HEADER, type CurrentUser } from '@chat/contracts';
 import { Public } from './public';
 import { LocalAuthGuard } from './local-auth.guard';
 import { LoginDto } from './dto/login.dto';
 import { AuthService } from './auth.service';
-import { COOKIE, LIFETIME } from './auth.constants';
+import { AuthCookieService } from './auth-cookie.service';
+import { COOKIE } from './auth.constants';
 import type { AuthRequest } from './auth-request';
 import { RegistrationDto } from './dto/registration.dto';
 import { CurrentUserDto } from './dto/current-user.dto';
@@ -45,7 +44,7 @@ const authHeaders = {
 export class AuthController {
   constructor(
     private readonly auth: AuthService,
-    @Inject(CONFIG) private readonly config: Config,
+    private readonly cookies: AuthCookieService,
   ) {}
   @Public()
   @Post('register')
@@ -57,7 +56,7 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
   ) {
     const { user, token, expiresAt } = await this.auth.register(input);
-    this.setCookie(response, token);
+    this.cookies.set(response, token);
     response.setHeader(AUTH_EXPIRES_HEADER, expiresAt.toISOString());
     return user;
   }
@@ -75,7 +74,7 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
   ): Promise<CurrentUser> {
     const { user, token, expiresAt } = await this.auth.login(request.user);
-    this.setCookie(response, token);
+    this.cookies.set(response, token);
     response.setHeader(AUTH_EXPIRES_HEADER, expiresAt.toISOString());
     return user;
   }
@@ -90,12 +89,7 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
   ) {
     this.auth.logout(request.auth.loginId);
-    response.clearCookie(COOKIE, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: this.config.COOKIE_SECURE === 'true',
-      path: '/',
-    });
+    this.cookies.clear(response);
   }
 
   @Get('me')
@@ -111,15 +105,5 @@ export class AuthController {
       request.auth.expiresAt.toISOString(),
     );
     return request.user;
-  }
-
-  private setCookie(response: Response, token: string) {
-    response.cookie(COOKIE, token, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: this.config.COOKIE_SECURE === 'true',
-      maxAge: LIFETIME * 1000,
-      path: '/',
-    });
   }
 }
