@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { LoginPage } from '@pages/login';
   import { RegisterPage } from '@pages/register';
   import {
     Alert,
@@ -12,13 +13,27 @@
   } from 'flowbite-svelte';
   import { createAuth } from '../auth';
   const auth = createAuth();
+  let registering = $state(false);
+  let logoutError = $state('');
+  async function logout() {
+    logoutError = '';
+    try {
+      await auth.logout();
+    } catch {
+      logoutError = 'Unable to sign out. Please try again';
+    }
+  }
   onMount(() => {
     void auth.restore();
+    return auth.dispose;
   });
 </script>
 
+<svelte:window onstorage={auth.storageChanged} />
+<svelte:document onvisibilitychange={auth.visibilityChanged} />
+
 <svelte:head
-  ><title>Chat — Registration</title><meta
+  ><title>Chat</title><meta
     name="description"
     content="Private chat"
   /></svelte:head
@@ -45,8 +60,21 @@
         >Welcome, {auth.state.user.username}!</Heading
       >
       <P>You are signed in. Your conversations will appear here.</P>
+      {#if logoutError}<Alert color="red" role="alert">{logoutError}</Alert
+        >{/if}
+      <Button onclick={logout}>Sign out</Button>
     </Card>
   </main>
+{:else if registering}
+  <RegisterPage
+    api={auth.api}
+    onRegistered={auth.registered}
+    onSignIn={() => (registering = false)}
+  />
 {:else}
-  <RegisterPage api={auth.api} onRegistered={auth.registered} />
+  <LoginPage
+    api={auth.api}
+    onLoggedIn={auth.registered}
+    onRegister={() => (registering = true)}
+  />
 {/if}

@@ -7,6 +7,7 @@ export function createOperations(client: Client<paths>) {
   return {
     ['AuthController_register']: endpoints['/api/auth/register'].POST,
     ['AuthController_login']: endpoints['/api/auth/login'].POST,
+    ['AuthController_logout']: endpoints['/api/auth/logout'].POST,
     ['AuthController_me']: endpoints['/api/auth/me'].GET,
   };
 }

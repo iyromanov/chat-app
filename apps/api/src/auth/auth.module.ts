@@ -1,3 +1,5 @@
+import { AuthGateway } from './auth.gateway';
+import { APP_GUARD } from '@nestjs/core';
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
@@ -31,7 +33,9 @@ import { JWT_AUDIENCE, JWT_ISSUER, LIFETIME } from './auth.constants';
   controllers: [AuthController],
   providers: [
     AuthService,
+    AuthGateway,
     AuthGuard,
+    { provide: APP_GUARD, useExisting: AuthGuard },
     LocalAuthGuard,
     LocalStrategy,
     JwtStrategy,

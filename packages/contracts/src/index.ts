@@ -32,3 +32,9 @@ export const errorSchema = z.object({
 export type Registration = z.infer<typeof registrationSchema>;
 export type CurrentUser = z.infer<typeof currentUserSchema>;
 export type ApiErrorBody = z.infer<typeof errorSchema>;
+
+export const authReadySchema = z.object({ expiresAt: z.iso.datetime() });
+export interface ServerEvents {
+  'auth:ready': (data: z.infer<typeof authReadySchema>) => void;
+  'auth:ended': () => void;
+}

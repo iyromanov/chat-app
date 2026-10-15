@@ -14,6 +14,7 @@ import {
   ApiBody,
   ApiCreatedResponse,
   ApiOkResponse,
+  ApiNoContentResponse,
   ApiBadRequestResponse,
   ApiConflictResponse,
   ApiUnauthorizedResponse,
@@ -22,10 +23,10 @@ import type { Response } from 'express';
 import { CONFIG, type Config } from '../common/config';
 import { ErrorDto } from '../common/dto/error.dto';
 import type { CurrentUser } from '@chat/contracts';
+import { Public } from './public';
 import { LocalAuthGuard } from './local-auth.guard';
 import { LoginDto } from './dto/login.dto';
 import { AuthService } from './auth.service';
-import { AuthGuard } from './auth.guard';
 import { COOKIE, LIFETIME } from './auth.constants';
 import type { AuthRequest } from './auth-request';
 import { RegistrationDto } from './dto/registration.dto';
@@ -37,6 +38,7 @@ export class AuthController {
     private readonly auth: AuthService,
     @Inject(CONFIG) private readonly config: Config,
   ) {}
+  @Public()
   @Post('register')
   @ApiCreatedResponse({ type: CurrentUserDto })
   @ApiBadRequestResponse({ type: ErrorDto })
@@ -50,6 +52,7 @@ export class AuthController {
     return user;
   }
 
+  @Public()
   @Post('login')
   @HttpCode(200)
   @UseGuards(LocalAuthGuard)
@@ -75,8 +78,25 @@ export class AuthController {
       path: '/',
     });
   }
+  @Post('logout')
+  @HttpCode(204)
+  @ApiCookieAuth(COOKIE)
+  @ApiNoContentResponse()
+  @ApiUnauthorizedResponse({ type: ErrorDto })
+  logout(
+    @Req() request: AuthRequest,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    this.auth.logout(request.auth.loginId);
+    response.clearCookie(COOKIE, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: this.config.COOKIE_SECURE === 'true',
+      path: '/',
+    });
+  }
+
   @Get('me')
-  @UseGuards(AuthGuard)
   @ApiCookieAuth(COOKIE)
   @ApiOkResponse({ type: CurrentUserDto })
   @ApiUnauthorizedResponse({ type: ErrorDto })

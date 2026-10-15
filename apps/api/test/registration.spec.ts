@@ -1,8 +1,10 @@
+import { randomUUID } from 'node:crypto';
 import 'reflect-metadata';
 import { Test } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
 import { GenericContainer, type StartedTestContainer } from 'testcontainers';
 import request from 'supertest';
+import { io, type Socket } from 'socket.io-client';
 import { JwtService, type JwtSignOptions } from '@nestjs/jwt';
 import { AppModule } from '../src/app.module';
 import { Clock } from '../src/common/clock';
@@ -12,6 +14,30 @@ import { currentUserSchema, errorSchema } from '@chat/contracts';
 describe('Authentication HTTP boundary (real MongoDB)', () => {
   let container: StartedTestContainer;
   let app: INestApplication;
+  const timers = new Map<() => void, number>();
+  const sockets: Socket[] = [];
+  let url: string;
+  function advance(milliseconds: number) {
+    now = new Date(now.getTime() + milliseconds);
+    for (const [callback, at] of timers) {
+      if (at <= now.getTime()) {
+        timers.delete(callback);
+        callback();
+      }
+    }
+  }
+  function connect(cookie?: string) {
+    const socket = io(url, {
+      transports: ['websocket'],
+      reconnection: false,
+      extraHeaders: cookie ? { Cookie: cookie } : {},
+    });
+    sockets.push(socket);
+    return socket;
+  }
+  function event(socket: Socket, name: string): Promise<unknown> {
+    return new Promise((resolve) => socket.once(name, resolve));
+  }
   let now = new Date('2026-10-14T12:00:00Z');
   beforeAll(async () => {
     container = await new GenericContainer('mongo:8')
@@ -28,13 +54,21 @@ describe('Authentication HTTP boundary (real MongoDB)', () => {
       ],
     })
       .overrideProvider(Clock)
-      .useValue({ now: () => now })
+      .useValue({
+        now: () => now,
+        scheduleAt: (at: Date, callback: () => void) => {
+          timers.set(callback, at.getTime());
+          return () => timers.delete(callback);
+        },
+      })
       .compile();
     app = module.createNestApplication();
     setup(app);
-    await app.init();
+    await app.listen(0, '127.0.0.1');
+    url = await app.getUrl();
   });
   afterAll(async () => {
+    for (const socket of sockets) socket.disconnect();
     await app?.close();
     await container?.stop();
   });
@@ -207,6 +241,96 @@ describe('Authentication HTTP boundary (real MongoDB)', () => {
     expect(response.headers['set-cookie']).toBeUndefined();
   });
 
+  it('logs out by clearing the cookie while a copied JWT remains valid', async () => {
+    const response = await login({
+      email: input.email,
+      password: input.password,
+    }).expect(200);
+    const cookie = response.headers['set-cookie'][0];
+    const logout = await request(app.getHttpServer())
+      .post('/api/auth/logout')
+      .set('Cookie', cookie)
+      .expect(204);
+    expect(logout.headers['set-cookie'][0]).toContain('chat_token=;');
+    expect(logout.headers['set-cookie'][0]).toContain('HttpOnly');
+    await request(app.getHttpServer())
+      .get('/api/auth/me')
+      .set('Cookie', cookie)
+      .expect(200, response.body);
+  });
+
+  it('authenticates Socket.io and disconnects only the current login on logout without revoking the JWT', async () => {
+    const first = await login({
+      email: input.email,
+      password: input.password,
+    }).expect(200);
+    const second = await login({
+      email: input.email,
+      password: input.password,
+    }).expect(200);
+    const cookie = first.headers['set-cookie'][0];
+    expect(second.headers['set-cookie'][0]).not.toBe(cookie);
+    const tabOne = connect(cookie);
+    await event(tabOne, 'connect');
+    const tabTwo = connect(cookie);
+    await event(tabTwo, 'connect');
+    const independent = connect(second.headers['set-cookie'][0]);
+    await event(independent, 'connect');
+    const disconnected = Promise.all([
+      event(tabOne, 'disconnect'),
+      event(tabTwo, 'disconnect'),
+    ]);
+    await request(app.getHttpServer())
+      .post('/api/auth/logout')
+      .set('Cookie', cookie)
+      .expect(204);
+    await disconnected;
+    expect(independent.connected).toBe(true);
+    await request(app.getHttpServer())
+      .get('/api/auth/me')
+      .set('Cookie', second.headers['set-cookie'][0])
+      .expect(200);
+    const copied = connect(cookie);
+    await event(copied, 'connect');
+    expect(copied.connected).toBe(true);
+  });
+
+  it('rejects missing and forged socket credentials', async () => {
+    for (const cookie of [undefined, 'chat_token=forged']) {
+      const socket = connect(cookie);
+      const failure = await event(socket, 'connect_error');
+      expect(failure).toMatchObject({ message: 'Authentication required' });
+      expect(socket.connected).toBe(false);
+    }
+  });
+
+  it('expires existing sockets and rejects HTTP and socket access at the same deadline', async () => {
+    const response = await login({
+      email: input.email,
+      password: input.password,
+    }).expect(200);
+    const cookie = response.headers['set-cookie'][0];
+    const socket = connect(cookie);
+    await event(socket, 'connect');
+    advance(86399 * 1000);
+    expect(socket.connected).toBe(true);
+    await request(app.getHttpServer())
+      .get('/api/auth/me')
+      .set('Cookie', cookie)
+      .expect(200);
+    const disconnected = event(socket, 'disconnect');
+    advance(1000);
+    await disconnected;
+    await request(app.getHttpServer())
+      .get('/api/auth/me')
+      .set('Cookie', cookie)
+      .expect(401);
+    const expired = connect(cookie);
+    expect(await event(expired, 'connect_error')).toMatchObject({
+      message: 'Authentication required',
+    });
+  });
+
   it.each([
     { issuer: 'other-api' },
     { audience: 'other-web' },
@@ -215,12 +339,17 @@ describe('Authentication HTTP boundary (real MongoDB)', () => {
     { sub: '507f1f77bcf86cd799439011' },
     { expiresIn: undefined },
     { notBefore: 60 },
+    { jti: 'invalid' },
   ])('rejects signed tokens with invalid claims: %j', async (overrides) => {
     const registered = await login({
       email: input.email,
       password: input.password,
     }).expect(200);
-    const { sub = registered.body.id, ...options } = overrides;
+    const {
+      sub = registered.body.id,
+      jti = randomUUID(),
+      ...options
+    } = overrides;
     const signingOptions: JwtSignOptions = {
       secret: 'test-secret-at-least-thirty-two-characters',
       algorithm: 'HS256',
@@ -231,7 +360,7 @@ describe('Authentication HTTP boundary (real MongoDB)', () => {
     };
     if (signingOptions.expiresIn === undefined) delete signingOptions.expiresIn;
     const token = new JwtService().sign(
-      { sub, iat: Math.floor(now.getTime() / 1000) },
+      { sub, jti, iat: Math.floor(now.getTime() / 1000) },
       signingOptions,
     );
     const response = await request(app.getHttpServer())

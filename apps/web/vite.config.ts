@@ -4,6 +4,12 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   plugins: [tailwindcss(), sveltekit()],
   server: {
-    proxy: { '/api': process.env.API_PROXY_TARGET ?? 'http://localhost:3001' },
+    proxy: {
+      '/api': process.env.API_PROXY_TARGET ?? 'http://localhost:3001',
+      '/socket.io': {
+        target: process.env.API_PROXY_TARGET ?? 'http://localhost:3001',
+        ws: true,
+      },
+    },
   },
 });

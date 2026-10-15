@@ -1,3 +1,5 @@
+import { AuthGateway } from './auth.gateway';
+import { randomUUID } from 'node:crypto';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import type { CurrentUser, Login, Registration } from '@chat/contracts';
@@ -10,7 +12,12 @@ export class AuthService {
     private readonly users: UsersService,
     private readonly jwt: JwtService,
     private readonly clock: Clock,
+    private readonly sockets: AuthGateway,
   ) {}
+
+  logout(loginId: string) {
+    this.sockets.logout(loginId);
+  }
 
   async register(input: Registration) {
     return this.login(await this.users.register(input));
@@ -32,6 +39,7 @@ export class AuthService {
       user,
       token: await this.jwt.signAsync({
         sub: user.id,
+        jti: randomUUID(),
         iat: Math.floor(this.clock.now().getTime() / 1000),
       }),
     };

@@ -1,8 +1,8 @@
 import type { Request } from 'express';
 import {
   Strategy,
-  type StrategyOptionsWithoutRequest,
-  type VerifyCallback,
+  type StrategyOptionsWithRequest,
+  type VerifyCallbackWithRequest,
 } from 'passport-jwt';
 import { Clock } from '../common/clock';
 
@@ -10,8 +10,8 @@ import { Clock } from '../common/clock';
 // per authentication so clockTimestamp follows the application clock.
 export class ClockJwtStrategy extends Strategy {
   constructor(
-    private readonly options: StrategyOptionsWithoutRequest & { clock: Clock },
-    private readonly verifyUser: VerifyCallback,
+    private readonly options: StrategyOptionsWithRequest & { clock: Clock },
+    private readonly verifyUser: VerifyCallbackWithRequest,
   ) {
     super(options, verifyUser);
   }
