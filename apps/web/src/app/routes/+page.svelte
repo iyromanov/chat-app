@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import type { CurrentUser } from '@chat/contracts';
   import { LoginPage } from '@pages/login';
   import { RegisterPage } from '@pages/register';
   import {
@@ -15,6 +16,10 @@
   const auth = createAuth();
   let registering = $state(false);
   let logoutError = $state('');
+  function signedIn(user: CurrentUser) {
+    registering = false;
+    auth.registered(user);
+  }
   async function logout() {
     logoutError = '';
     try {
@@ -68,13 +73,13 @@
 {:else if registering}
   <RegisterPage
     api={auth.api}
-    onRegistered={auth.registered}
+    onRegistered={signedIn}
     onSignIn={() => (registering = false)}
   />
 {:else}
   <LoginPage
     api={auth.api}
-    onLoggedIn={auth.registered}
+    onLoggedIn={signedIn}
     onRegister={() => (registering = true)}
   />
 {/if}
