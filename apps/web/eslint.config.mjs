@@ -84,7 +84,14 @@ export default [
     languageOptions: { parser: ts.parser },
   },
   {
-    languageOptions: { globals: { SubmitEvent: 'readonly' } },
+    languageOptions: {
+      globals: {
+        SubmitEvent: 'readonly',
+        HTMLInputElement: 'readonly',
+        Element: 'readonly',
+        IntersectionObserver: 'readonly',
+      },
+    },
   },
   {
     files: ['src/**/*.{ts,svelte}'],

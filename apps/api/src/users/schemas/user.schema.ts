@@ -11,3 +11,5 @@ export class User {
 export const userSchema = SchemaFactory.createForClass(User);
 userSchema.index({ normalizedEmail: 1 }, { unique: true });
 userSchema.index({ normalizedUsername: 1 }, { unique: true });
+
+userSchema.index({ normalizedUsername: 1, _id: 1 });

@@ -9,5 +9,8 @@ export function createOperations(client: Client<paths>) {
     ['AuthController_login']: endpoints['/api/auth/login'].POST,
     ['AuthController_logout']: endpoints['/api/auth/logout'].POST,
     ['AuthController_me']: endpoints['/api/auth/me'].GET,
+    ['UsersController_list']: endpoints['/api/users'].GET,
+    ['ConversationsController_start']: endpoints['/api/conversations'].POST,
+    ['ConversationsController_list']: endpoints['/api/conversations'].GET,
   };
 }

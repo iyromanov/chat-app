@@ -37,7 +37,36 @@ export const authReadySchema = z.object({ expiresAt: z.iso.datetime() });
 export interface ServerEvents {
   'auth:ready': (data: z.infer<typeof authReadySchema>) => void;
   'auth:ended': () => void;
+  'conversation:created': (data: Conversation) => void;
 }
 
 export const AUTH_EXPIRES_HEADER = 'X-Auth-Expires-At';
 export const authDeadlineSchema = z.iso.datetime();
+
+export const publicUserSchema = currentUserSchema.omit({ email: true });
+export type PublicUser = z.infer<typeof publicUserSchema>;
+export const usersQuerySchema = z.object({
+  search: z.string().max(100).optional(),
+  cursor: z.string().min(1).max(2048).optional(),
+});
+export const usersPageSchema = z.object({
+  items: z.array(publicUserSchema),
+  nextCursor: z.union([z.string().min(1), z.null()]),
+});
+
+export const objectIdSchema = z
+  .string()
+  .regex(/^[a-f0-9]{24}$/, 'Enter a valid user ID');
+export const startConversationSchema = z.object({ userId: objectIdSchema });
+export const conversationSchema = z.object({
+  id: objectIdSchema,
+  counterpart: publicUserSchema,
+  createdAt: z.iso.datetime(),
+  lastMessage: z.null(),
+});
+export type Conversation = z.infer<typeof conversationSchema>;
+export const conversationsQuerySchema = usersQuerySchema.pick({ cursor: true });
+export const conversationsPageSchema = z.object({
+  items: z.array(conversationSchema),
+  nextCursor: z.union([z.string().min(1), z.null()]),
+});

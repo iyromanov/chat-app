@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { ConversationsModule } from './conversations/conversations.module';
 import { writeFileSync } from 'node:fs';
 import { Global, Module } from '@nestjs/common';
 import { AuthModule } from './auth/auth.module';
@@ -10,7 +11,7 @@ import { setup, openApi } from './setup';
 // Metadata export deliberately does not connect to MongoDB.
 @Global()
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, ConversationsModule],
   providers: [
     {
       provide: CONFIG,
@@ -24,6 +25,8 @@ class ExportModule {}
 async function main() {
   const module = await Test.createTestingModule({ imports: [ExportModule] })
     .overrideProvider(getModelToken('User'))
+    .useValue({})
+    .overrideProvider(getModelToken('Conversation'))
     .useValue({})
     .compile();
   const app = module.createNestApplication();

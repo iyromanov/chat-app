@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { CurrentUser } from '@chat/contracts';
+  import { ChatPage } from '@pages/chat';
   import { LoginPage } from '@pages/login';
   import { RegisterPage } from '@pages/register';
   import {
@@ -58,17 +59,21 @@
     </div>
   </main>
 {:else if auth.state.status === 'authenticated'}
-  <main class="mx-auto max-w-3xl p-6 sm:p-12">
+  <main class="mx-auto flex max-w-6xl flex-col gap-6 p-4 sm:p-8">
     <Card size="xl" class="gap-4 p-6">
       <Helper>Private area</Helper>
       <Heading tag="h1" class="text-3xl"
         >Welcome, {auth.state.user.username}!</Heading
       >
-      <P>You are signed in. Your conversations will appear here.</P>
+
       {#if logoutError}<Alert color="red" role="alert">{logoutError}</Alert
         >{/if}
       <Button onclick={logout}>Sign out</Button>
     </Card>
+    {#key auth.state.user.id}<ChatPage
+        api={auth.api}
+        conversations={auth.conversations}
+      />{/key}
   </main>
 {:else if registering}
   <RegisterPage

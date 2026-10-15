@@ -1,4 +1,8 @@
-import type { ServerEvents } from '@chat/contracts';
+import {
+  currentUserSchema,
+  type Conversation,
+  type ServerEvents,
+} from '@chat/contracts';
 import {
   OnGatewayInit,
   WebSocketGateway,
@@ -30,6 +34,7 @@ export class AuthGateway implements OnGatewayInit {
               if (error || !user)
                 return next(new Error('Authentication required'));
               socket.data.auth = request.auth;
+              socket.data.userId = currentUserSchema.parse(user).id;
               next();
             },
           )(request, {} as Response, next as NextFunction);
@@ -41,12 +46,17 @@ export class AuthGateway implements OnGatewayInit {
   handleConnection(socket: Socket) {
     const { loginId, expiresAt } = socket.data.auth as AuthRequest['auth'];
     void socket.join(`login:${loginId}`);
+    void socket.join(`user:${socket.data.userId}`);
     socket.emit('auth:ready', { expiresAt: expiresAt.toISOString() });
     const cancel = this.clock.scheduleAt(expiresAt, () => {
       socket.emit('auth:ended');
       socket.disconnect(true);
     });
     socket.once('disconnect', cancel);
+  }
+
+  conversationCreated(userId: string, conversation: Conversation) {
+    this.server.to(`user:${userId}`).emit('conversation:created', conversation);
   }
 
   logout(loginId: string) {

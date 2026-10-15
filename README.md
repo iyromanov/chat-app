@@ -71,3 +71,13 @@ Testcontainers автоматически создаёт и удаляет от�
 Jest проверяет HTTP-вход и ошибки, persistent cookie, приватный доступ, подпись/claims, handshake, отключение двух вкладок текущего входа, независимый одновременный вход, повторное использование копии JWT и истечение HTTP/существующего Socket.io-соединения с управляемым временем и реальной MongoDB. Ручная проверка: войти, обновить страницу, открыть вторую вкладку; войти тем же пользователем в независимом профиле браузера; выйти из первой вкладки и убедиться, что обе вкладки показывают вход, а независимый профиль остаётся в приватной области. Закрыть и снова открыть браузер, проверить сохранение входа до срока cookie.
 
 Successful registration, login and restoration responses include the documented `X-Auth-Expires-At` header with the original JWT deadline. The app schedules local expiry immediately from this HTTP response, independently of Socket.io availability, and clears the previous deadline when authentication changes. Restoring authentication does not extend the token lifetime.
+
+### Find users and start a conversation
+
+1. Register two users in independent browser sessions (for example Chrome and an incognito window). Keep an additional tab open for each participant, and optionally a third user in another session.
+2. Search by part of the other user's username, mixing uppercase and lowercase. Clear the search to list everyone else; search for an unknown name to see “No users found”. Other users' email addresses are never shown.
+3. Click “Start conversation”. Both participants' tabs immediately show the same conversation with the other username and “No messages”. Click again, or start from the other participant, to reopen the same conversation. The third user receives nothing.
+4. Reload or sign out and in: the empty conversation persists. At a narrow viewport, the user list and conversations stack vertically.
+5. With more than 50 other users or conversations, scroll down to load the next page automatically. “Load more” also supports keyboard activation. Change the search during loading and confirm only results for the latest search remain.
+
+HTTP/Socket.io integration coverage runs against Testcontainers MongoDB via `pnpm test`; it covers search, 50-item pages, invalid and query-bound cursors, tied conversation timestamps, repeated/concurrent starts, participant lists, and event delivery to all participant tabs. Browser acceptance remains a separate manual check.

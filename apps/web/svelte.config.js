@@ -9,6 +9,7 @@ export default {
       '@pages': 'src/pages',
       '@features': 'src/features',
       '@shared': 'src/shared',
+      '@entities': 'src/entities',
     },
   },
 };

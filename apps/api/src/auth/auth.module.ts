@@ -40,6 +40,6 @@ import { JWT_AUDIENCE, JWT_ISSUER, LIFETIME } from './auth.constants';
     LocalStrategy,
     JwtStrategy,
   ],
-  exports: [AuthService, AuthGuard],
+  exports: [AuthService, AuthGuard, AuthGateway],
 })
 export class AuthModule {}

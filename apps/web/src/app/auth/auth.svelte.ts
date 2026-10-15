@@ -1,5 +1,7 @@
 import { io, type Socket } from 'socket.io-client';
 import { type ServerEvents, type CurrentUser } from '@chat/contracts';
+import { createConversations } from '@entities/conversation';
+import { conversationSchema } from '@chat/contracts';
 import { createApi, readAuthDeadline, ApiError } from '@shared/api';
 
 type AuthState =
@@ -18,10 +20,13 @@ class Auth {
     clearTimeout(this.expiryTimer);
     this.socket?.disconnect();
     this.socket = undefined;
+    this.conversations.clear();
     this.state = { status: 'anonymous', user: null };
   };
 
   readonly api = createApi({ onUnauthorized: this.anonymous });
+
+  readonly conversations = createConversations(this.api);
 
   registered = (user: CurrentUser, expiresAt: number) => {
     this.anonymous();
@@ -32,12 +37,23 @@ class Auth {
     }, expiresAt - Date.now());
     this.state = { status: 'authenticated', user };
     this.socket = io({ withCredentials: true });
+    this.socket.on('conversation:created', (data) => {
+      if (generation !== this.generation) return;
+      const parsed = conversationSchema.safeParse(data);
+      if (parsed.success) this.conversations.upsert(parsed.data);
+    });
+    this.socket.on('connect', () => {
+      if (generation === this.generation) void this.conversations.load();
+    });
+    void this.conversations.load();
     this.socket.on('auth:ended', () => {
       if (generation === this.generation) this.anonymous();
     });
     this.socket.on('connect_error', () => {
-      if (generation === this.generation)
+      if (generation === this.generation) {
         void this.api.AuthController_me().catch(() => {});
+        void this.conversations.load();
+      }
     });
   };
 
@@ -63,6 +79,7 @@ class Auth {
       this.state.status === 'authenticated'
     ) {
       void this.api.AuthController_me().catch(() => {});
+      void this.conversations.load();
     }
   };
 
