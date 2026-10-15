@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Button } from 'flowbite-svelte';
   let { onLoad }: { onLoad: () => void } = $props();
+
   function observe(element: Element) {
     const observer = new IntersectionObserver(
       (entries) => {

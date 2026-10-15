@@ -11,6 +11,7 @@ type Draft = {
 
 class MessageComposer {
   drafts = $state<Record<string, Draft>>({});
+
   private disposed = false;
 
   constructor(
@@ -65,6 +66,7 @@ class MessageComposer {
 }
 
 export type MessageComposerStore = MessageComposer;
+
 export function createMessageComposer(
   api: () => ApiClient,
   onSent: (message: Message) => void,

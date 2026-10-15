@@ -46,16 +46,19 @@
   let searchInput = $state<HTMLInputElement>();
   let viewportHeight = $state<number>();
   let viewportTop = $state(0);
+
   function select(id: string) {
     selectedId = id;
     composer.open(id);
     messages.open(id);
     view = 'chat';
   }
+
   function started(conversation: Conversation) {
     conversations.upsert(conversation);
     select(conversation.id);
   }
+
   function openSearch() {
     searchActive = true;
     view = 'search';
@@ -63,24 +66,29 @@
     if (!users.items.length && !users.loading) void users.load();
     void tick().then(() => searchInput?.focus());
   }
+
   function closeSearch() {
     searchActive = false;
     users.change('');
     view = 'list';
     searchInput?.blur();
   }
+
   function back() {
     view = searchActive ? 'search' : 'list';
   }
+
   function keyboard(event: KeyboardEvent) {
     if (event.key !== 'Escape') return;
     if (menuOpen) menuOpen = false;
     else if (searchActive && view !== 'chat') closeSearch();
   }
+
   function outside(event: MouseEvent) {
     if (menuOpen && !menuElement?.contains(event.target as Node))
       menuOpen = false;
   }
+
   async function logout() {
     signingOut = true;
     try {
@@ -90,17 +98,22 @@
       menuOpen = false;
     }
   }
+
   onMount(() => {
     const media = window.matchMedia('(min-width: 768px)');
+
     const changed = () => {
       if (!media.matches && selectedId) view = 'chat';
     };
+
     media.addEventListener('change', changed);
     const viewport = window.visualViewport;
+
     const resize = () => {
       viewportHeight = viewport?.height ?? window.innerHeight;
       viewportTop = viewport?.offsetTop ?? 0;
     };
+
     resize();
     viewport?.addEventListener('resize', resize);
     viewport?.addEventListener('scroll', resize);

@@ -29,16 +29,19 @@
   let showNew = $state(false);
   let loadingOlderId: string | null = null;
   let scrollGeneration = 0;
+
   function bottom() {
     if (scroller) scroller.scrollTop = scroller.scrollHeight;
     nearBottom = true;
     showNew = false;
   }
+
   function scroll() {
     nearBottom =
       scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 80;
     if (nearBottom) showNew = false;
   }
+
   async function older() {
     if (messages.loading || loadingOlderId === conversation.id) return;
     const id = conversation.id;
@@ -54,6 +57,7 @@
       if (loadingOlderId === id) loadingOlderId = null;
     }
   }
+
   $effect(() => {
     const id = conversation.id;
     const last = messages.items.at(-1);
@@ -78,6 +82,7 @@
         });
     });
   });
+
   function observeSize(element: Element) {
     const observer = new ResizeObserver(() => {
       if (nearBottom && loadingOlderId !== conversation.id) bottom();

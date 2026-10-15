@@ -1,13 +1,17 @@
 import type { Conversation, Message } from '@chat/contracts';
 import type { ApiClient } from '@shared/api';
+
 class Conversations {
   items = $state.raw<Conversation[]>([]);
   nextCursor = $state<string | null>(null);
   loading = $state(false);
   error = $state('');
+
   private generation = 0;
   private refreshPending = false;
+
   constructor(private readonly api: ApiClient) {}
+
   upsert = (conversation: Conversation) => {
     const previous = this.items.find((item) => item.id === conversation.id);
     const before = previous?.lastMessage;
@@ -29,6 +33,7 @@ class Conversations {
         ) || b.id.localeCompare(a.id),
     );
   };
+
   applyMessage = (message: Message) => {
     const conversation = this.items.find(
       (item) => item.id === message.conversationId,
@@ -36,6 +41,7 @@ class Conversations {
     if (conversation) this.upsert({ ...conversation, lastMessage: message });
     else void this.load();
   };
+
   clear = () => {
     this.generation++;
     this.refreshPending = false;
@@ -44,6 +50,7 @@ class Conversations {
     this.loading = false;
     this.error = '';
   };
+
   load = async (more = false) => {
     if (this.loading) {
       if (!more) this.refreshPending = true;
@@ -75,6 +82,7 @@ class Conversations {
   };
 }
 export type ConversationStore = Conversations;
+
 export function createConversations(api: ApiClient) {
   return new Conversations(api);
 }

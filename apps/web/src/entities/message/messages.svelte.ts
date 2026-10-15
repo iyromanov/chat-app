@@ -1,14 +1,18 @@
 import type { Message } from '@chat/contracts';
 import type { ApiClient } from '@shared/api';
+
 class Messages {
   conversationId = $state<string | null>(null);
   items = $state.raw<Message[]>([]);
   nextCursor = $state<string | null>(null);
   loading = $state(false);
   error = $state('');
+
   private generation = 0;
   private refreshPending = false;
+
   constructor(private readonly api: ApiClient) {}
+
   upsert = (message: Message) => {
     if (message.conversationId !== this.conversationId) return;
     this.items = [
@@ -19,12 +23,14 @@ class Messages {
         a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
     );
   };
+
   open = (conversationId: string) => {
     if (this.conversationId === conversationId) return;
     this.clear();
     this.conversationId = conversationId;
     void this.load();
   };
+
   clear = () => {
     this.generation++;
     this.conversationId = null;
@@ -34,6 +40,7 @@ class Messages {
     this.error = '';
     this.refreshPending = false;
   };
+
   load = async (more = false) => {
     if (!this.conversationId) return;
     if (this.loading) {
@@ -70,6 +77,7 @@ class Messages {
   };
 }
 export type MessageStore = Messages;
+
 export function createMessages(api: ApiClient): MessageStore {
   return new Messages(api);
 }

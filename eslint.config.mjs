@@ -14,6 +14,12 @@ export default ts.config(
   ...contracts,
   prettier,
   {
+    files: ['apps/web/**/*.{ts,svelte}'],
+    rules: {
+      'lines-between-class-members': ['error', 'always'],
+    },
+  },
+  {
     languageOptions: {
       globals: {
         process: 'readonly',

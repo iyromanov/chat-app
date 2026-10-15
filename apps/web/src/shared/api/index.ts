@@ -17,6 +17,7 @@ export class ApiError extends Error {
     super(body.message);
   }
 }
+
 export function createApi(options: {
   baseUrl?: string;
   fetch?: typeof fetch;
@@ -49,6 +50,7 @@ export function createApi(options: {
   });
   return createOperations(client);
 }
+
 export type ApiClient = ReturnType<typeof createApi>;
 
 export function readAuthDeadline(response: Response): number {

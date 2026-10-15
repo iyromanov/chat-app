@@ -16,8 +16,11 @@ class Auth {
   state = $state.raw<AuthState>({ status: 'loading', user: null });
 
   private socket?: Socket<ServerEvents>;
+
   private expiryTimer?: ReturnType<typeof setTimeout>;
+
   private generation = 0;
+
   private anonymous = () => {
     this.generation++;
     clearTimeout(this.expiryTimer);
@@ -31,7 +34,9 @@ class Auth {
   readonly api = createApi({ onUnauthorized: this.anonymous });
 
   readonly conversations = createConversations(this.api);
+
   readonly messages = createMessages(this.api);
+
   messageSaved = (message: Message) => {
     this.messages.upsert(message);
     this.conversations.applyMessage(message);

@@ -9,10 +9,12 @@
   const auth = createAuth();
   let registering = $state(false);
   let logoutError = $state('');
+
   function signedIn(user: CurrentUser, expiresAt: number) {
     registering = false;
     auth.registered(user, expiresAt);
   }
+
   async function logout() {
     logoutError = '';
     try {
@@ -21,6 +23,7 @@
       logoutError = 'Unable to sign out. Please try again';
     }
   }
+
   onMount(() => {
     void auth.restore();
     return auth.dispose;

@@ -22,6 +22,7 @@
   });
   let loading = $state(false);
   let error = $state('');
+
   async function start() {
     if (loading) return;
     loading = true;

@@ -1,13 +1,17 @@
 import type { PublicUser } from '@chat/contracts';
 import type { ApiClient } from '@shared/api';
+
 class UserSearch {
   search = $state('');
   items = $state.raw<PublicUser[]>([]);
   nextCursor = $state<string | null>(null);
   loading = $state(false);
   error = $state('');
+
   private generation = 0;
+
   constructor(private readonly api: () => ApiClient) {}
+
   change = (search: string) => {
     this.generation++;
     this.search = search;
@@ -16,9 +20,11 @@ class UserSearch {
     this.loading = false;
     void this.load();
   };
+
   dispose = () => {
     this.generation++;
   };
+
   load = async (more = false) => {
     if (this.loading || (more && !this.nextCursor)) return;
     const generation = this.generation;
@@ -49,6 +55,7 @@ class UserSearch {
     }
   };
 }
+
 export function createUserSearch(api: () => ApiClient) {
   return new UserSearch(api);
 }

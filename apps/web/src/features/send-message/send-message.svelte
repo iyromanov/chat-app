@@ -8,10 +8,12 @@
     conversationId,
   }: { composer: MessageComposerStore; conversationId: string } = $props();
   let draft = $derived(composer.drafts[conversationId]);
+
   function resize(element: HTMLTextAreaElement) {
     element.style.height = 'auto';
     element.style.height = `${Math.min(element.scrollHeight, 160)}px`;
   }
+
   let textarea = $state<HTMLTextAreaElement>();
   $effect(() => {
     const text = draft.text;
@@ -21,10 +23,12 @@
         if (element.value === text) resize(element);
       });
   });
+
   function submit(event: SubmitEvent) {
     event.preventDefault();
     void composer.send(conversationId);
   }
+
   function keydown(event: KeyboardEvent) {
     if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
       event.preventDefault();

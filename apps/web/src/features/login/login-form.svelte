@@ -14,6 +14,7 @@
   let pending = $state(false);
   let error = $state('');
   let fields = $state<Record<string, string[]>>({});
+
   async function submit(event: SubmitEvent) {
     event.preventDefault();
     if (pending) return;
