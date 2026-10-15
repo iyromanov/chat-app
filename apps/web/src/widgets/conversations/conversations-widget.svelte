@@ -1,14 +1,16 @@
 <script lang="ts">
-  import { Alert, Button, Card, Heading, P, Spinner } from 'flowbite-svelte';
+  import { Alert, Button, Heading, P, Spinner } from 'flowbite-svelte';
   import type { ConversationStore } from '@entities/conversation';
   import { InfiniteScroll } from '@shared/ui';
   let {
     conversations,
-    selectedId = $bindable(null),
-  }: { conversations: ConversationStore; selectedId: string | null } = $props();
-  let selected = $derived(
-    conversations.items.find((item) => item.id === selectedId),
-  );
+    selectedId,
+    onSelect,
+  }: {
+    conversations: ConversationStore;
+    selectedId: string | null;
+    onSelect: (id: string) => void;
+  } = $props();
 </script>
 
 <section class="flex min-w-0 flex-col gap-4" aria-label="Conversations">
@@ -16,13 +18,18 @@
   {#each conversations.items as conversation (conversation.id)}
     <Button
       color={selectedId === conversation.id ? 'primary' : 'alternative'}
-      onclick={() => (selectedId = conversation.id)}
-      class="justify-start text-left"
+      onclick={() => onSelect(conversation.id)}
+      class="min-w-0 justify-start text-left"
     >
-      <span class="flex flex-col gap-1"
-        ><span>{conversation.counterpart.username}</span><span>No messages</span
-        ><time datetime={conversation.createdAt}
-          >{new Date(conversation.createdAt).toLocaleString()}</time
+      <span class="flex min-w-0 flex-col gap-1"
+        ><span>{conversation.counterpart.username}</span><span class="truncate"
+          >{conversation.lastMessage?.text ?? 'No messages'}</span
+        ><time
+          datetime={conversation.lastMessage?.createdAt ??
+            conversation.createdAt}
+          >{new Date(
+            conversation.lastMessage?.createdAt ?? conversation.createdAt,
+          ).toLocaleString()}</time
         ></span
       >
     </Button>
@@ -41,9 +48,4 @@
   {:else if conversations.nextCursor}<InfiniteScroll
       onLoad={() => void conversations.load(true)}
     />{/if}
-  {#if selected}<Card size="xl"
-      ><Heading tag="h3">{selected.counterpart.username}</Heading><P
-        >No messages</P
-      ></Card
-    >{/if}
 </section>

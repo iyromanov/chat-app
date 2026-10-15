@@ -1,6 +1,8 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import type { Message } from '@chat/contracts';
 import { Model, Types } from 'mongoose';
+import { MessageActivityService } from '../messages/message-activity.service';
 import { Clock } from '../common/clock';
 import { isDuplicateKeyError } from '../common/mongo-errors';
 import { Conversation } from './conversation.schema';
@@ -9,9 +11,11 @@ export type ConversationRecord = {
   id: string;
   participants: string[];
   createdAt: Date;
+  lastMessage?: Message | null;
+  activityAt?: Date;
 };
 
-type ConversationPosition = { createdAt: Date; id: string };
+type ConversationPosition = { activityAt: Date; id: string };
 type StoredConversation = Conversation & { _id: Types.ObjectId };
 
 function toRecord(conversation: StoredConversation): ConversationRecord {
@@ -28,6 +32,7 @@ export class ConversationsRepository implements OnModuleInit {
     @InjectModel(Conversation.name)
     private readonly conversations: Model<Conversation>,
     private readonly clock: Clock,
+    private readonly messageActivity: MessageActivityService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -67,22 +72,53 @@ export class ConversationsRepository implements OnModuleInit {
     after?: ConversationPosition,
   ): Promise<ConversationRecord[]> {
     const rows = await this.conversations
-      .find({
-        participants: userId,
+      .aggregate<
+        StoredConversation & { lastMessage: Message | null; activityAt: Date }
+      >([
+        { $match: { participants: userId } },
+        ...this.messageActivity.latestForConversationPipeline(),
         ...(after
-          ? {
-              $or: [
-                { createdAt: { $lt: after.createdAt } },
-                { createdAt: after.createdAt, _id: { $lt: after.id } },
-              ],
-            }
-          : {}),
-      })
-      .sort({ createdAt: -1, _id: -1 })
-      .limit(limit)
-      .lean()
+          ? [
+              {
+                $match: {
+                  $or: [
+                    { activityAt: { $lt: after.activityAt } },
+                    {
+                      activityAt: after.activityAt,
+                      _id: { $lt: new Types.ObjectId(after.id) },
+                    },
+                  ],
+                },
+              },
+            ]
+          : []),
+        { $sort: { activityAt: -1, _id: -1 } },
+        { $limit: limit },
+      ])
       .exec();
-    return rows.map(toRecord);
+    return rows.map((row) => ({
+      ...toRecord(row),
+      lastMessage: row.lastMessage,
+      activityAt: row.activityAt,
+    }));
+  }
+
+  async withActivity(
+    conversation: ConversationRecord,
+  ): Promise<ConversationRecord> {
+    const [row] = await this.conversations
+      .aggregate<
+        StoredConversation & { lastMessage: Message | null; activityAt: Date }
+      >([
+        { $match: { _id: new Types.ObjectId(conversation.id) } },
+        ...this.messageActivity.latestForConversationPipeline(),
+      ])
+      .exec();
+    return {
+      ...conversation,
+      lastMessage: row.lastMessage,
+      activityAt: row.activityAt,
+    };
   }
 
   async findForParticipant(

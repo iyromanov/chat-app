@@ -37,6 +37,7 @@ export const authReadySchema = z.object({ expiresAt: z.iso.datetime() });
 export interface ServerEvents {
   'auth:ready': (data: z.infer<typeof authReadySchema>) => void;
   'auth:ended': () => void;
+  'message:created': (data: Message) => void;
   'conversation:created': (data: Conversation) => void;
 }
 
@@ -58,13 +59,33 @@ export type UsersPage = z.infer<typeof usersPageSchema>;
 
 export const objectIdSchema = z
   .string()
-  .regex(/^[a-f0-9]{24}$/, 'Enter a valid user ID');
+  .regex(/^[a-f0-9]{24}$/, 'Enter a valid ID');
+export const messageTextSchema = z
+  .string()
+  .trim()
+  .min(1, 'Enter a message')
+  .max(2000, 'Use at most 2000 characters');
+export const sendMessageSchema = z.object({
+  text: messageTextSchema,
+  attemptId: z.string().min(1).max(100),
+});
+export type SendMessage = z.infer<typeof sendMessageSchema>;
+export const messageSchema = z.object({
+  id: objectIdSchema,
+  conversationId: objectIdSchema,
+  senderId: objectIdSchema,
+  text: messageTextSchema,
+  attemptId: z.string(),
+  createdAt: z.iso.datetime(),
+});
+export type Message = z.infer<typeof messageSchema>;
+
 export const startConversationSchema = z.object({ userId: objectIdSchema });
 export const conversationSchema = z.object({
   id: objectIdSchema,
   counterpart: publicUserSchema,
   createdAt: z.iso.datetime(),
-  lastMessage: z.null(),
+  lastMessage: messageSchema.nullable(),
 });
 export type Conversation = z.infer<typeof conversationSchema>;
 export const conversationsQuerySchema = usersQuerySchema.pick({ cursor: true });
@@ -73,3 +94,12 @@ export const conversationsPageSchema = z.object({
   nextCursor: z.union([z.string().min(1), z.null()]),
 });
 export type ConversationsPage = z.infer<typeof conversationsPageSchema>;
+
+export const messagesQuerySchema = conversationsQuerySchema;
+export const messagesPageSchema = z.object({
+  items: z.array(messageSchema),
+  nextCursor: z.union([z.string().min(1), z.null()]),
+});
+export type MessagesPage = z.infer<typeof messagesPageSchema>;
+
+export const messageParamsSchema = z.object({ conversationId: objectIdSchema });

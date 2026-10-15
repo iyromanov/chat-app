@@ -1,4 +1,4 @@
-import type { Conversation } from '@chat/contracts';
+import type { Conversation, Message } from '@chat/contracts';
 import type { ApiClient } from '@shared/api';
 class Conversations {
   items = $state.raw<Conversation[]>([]);
@@ -9,13 +9,32 @@ class Conversations {
   private refreshPending = false;
   constructor(private readonly api: ApiClient) {}
   upsert = (conversation: Conversation) => {
+    const previous = this.items.find((item) => item.id === conversation.id);
+    const before = previous?.lastMessage;
+    const incoming = conversation.lastMessage;
+    if (
+      before &&
+      (!incoming ||
+        before.createdAt > incoming.createdAt ||
+        (before.createdAt === incoming.createdAt && before.id > incoming.id))
+    )
+      conversation = { ...conversation, lastMessage: before };
     this.items = [
       ...this.items.filter((item) => item.id !== conversation.id),
       conversation,
     ].sort(
       (a, b) =>
-        b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id),
+        (b.lastMessage?.createdAt ?? b.createdAt).localeCompare(
+          a.lastMessage?.createdAt ?? a.createdAt,
+        ) || b.id.localeCompare(a.id),
     );
+  };
+  applyMessage = (message: Message) => {
+    const conversation = this.items.find(
+      (item) => item.id === message.conversationId,
+    );
+    if (conversation) this.upsert({ ...conversation, lastMessage: message });
+    else void this.load();
   };
   clear = () => {
     this.generation++;

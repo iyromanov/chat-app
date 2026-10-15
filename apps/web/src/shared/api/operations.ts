@@ -12,5 +12,9 @@ export function createOperations(client: Client<paths>) {
     ['UsersController_list']: endpoints['/api/users'].GET,
     ['ConversationsController_start']: endpoints['/api/conversations'].POST,
     ['ConversationsController_list']: endpoints['/api/conversations'].GET,
+    ['MessagesController_send']:
+      endpoints['/api/conversations/{conversationId}/messages'].POST,
+    ['MessagesController_list']:
+      endpoints['/api/conversations/{conversationId}/messages'].GET,
   };
 }
