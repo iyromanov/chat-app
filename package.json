@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "pnpm --filter @chat/contracts build && pnpm --filter @chat/api test",
+    "test": "pnpm --filter @chat/contracts build && pnpm --filter @chat/api test && pnpm --filter @chat/web test",
     "generate": "pnpm --filter @chat/contracts build && pnpm --filter @chat/api openapi && openapi-typescript apps/api/openapi.json -o apps/web/src/shared/api/schema.d.ts && node scripts/generate-api-client.mjs",
     "generate:check": "node scripts/check-generated.mjs"
   },

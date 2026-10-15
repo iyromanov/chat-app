@@ -77,7 +77,7 @@ Successful registration, login and restoration responses include the documented 
 1. Register two users in independent browser sessions (for example Chrome and an incognito window). Keep an additional tab open for each participant, and optionally a third user in another session.
 2. Search by part of the other user's username, mixing uppercase and lowercase. Clear the search to list everyone else; search for an unknown name to see “No users found”. Other users' email addresses are never shown.
 3. Click “Start conversation”. Both participants' tabs immediately show the same conversation with the other username and “No messages”. Click again, or start from the other participant, to reopen the same conversation. The third user receives nothing.
-4. Reload or sign out and in: the empty conversation persists. At a narrow viewport, the user list and conversations stack vertically.
+4. Reload or sign out and in: the empty conversation persists. Below 768 CSS pixels, chats, user search and the selected conversation occupy separate full-screen views. Back returns to the originating list or search with its position and query preserved.
 5. With more than 50 other users or conversations, scroll down to load the next page automatically. “Load more” also supports keyboard activation. Change the search during loading and confirm only results for the latest search remain.
 
 HTTP/Socket.io integration coverage runs against Testcontainers MongoDB via `pnpm test`; it covers search, 50-item pages, invalid and query-bound cursors, tied conversation timestamps, repeated/concurrent starts, participant lists, and event delivery to all participant tabs. Browser acceptance remains a separate manual check.
@@ -92,3 +92,13 @@ HTTP/Socket.io integration coverage runs against Testcontainers MongoDB via `pnp
 `POST /api/conversations/{conversationId}/messages` accepts `text` and `attemptId`. The unique conversation/sender/attempt index protects concurrent retries; a retry with different normalized text returns `409 MESSAGE_ATTEMPT_CONFLICT`. `GET` on the same route returns 50 messages with a scoped `nextCursor` for older history. The `message:created` Socket.io event carries the same public message as HTTP, after saving. Stores merge by message ID; app links message events to the independent message and conversation stores. Latest conversation activity is derived from an indexed Message lookup, without storing a message copy in Conversation or using a multi-document transaction.
 
 The message HTTP/Socket.io tests cover trimming, line breaks, length boundaries, persistence after login, participant access, unique concurrent attempts, text conflicts, tied timestamp pagination and cursor scope, activity ordering, and delivery to every participant tab while excluding outsiders. Full missed-message recovery and connection status belong to ticket 05; browser acceptance is tracked separately in ticket 04.
+
+### Chat layout and navigation
+
+The authenticated interface fills the viewport. At 768 CSS pixels and above, a permanent 320 px sidebar sits beside the conversation; smaller viewports show one screen at a time. Chat lists, search results and messages scroll independently. Avatars are circles containing the first two Unicode code points of the username, preserving its case (one character for a one-character username).
+
+Focus the desktop search to browse users, including with an empty query; Escape or Close search returns to chats. On mobile, use the search icon, Back and the compact menu for Sign out. Opening a conversation from search preserves the query and results for the return journey.
+
+Enter sends a message; Shift+Enter inserts a newline. Drafts and retry attempt IDs stay with their conversation while switching views, until a page reload or sign out. Opening a conversation shows the latest messages; incoming messages follow the bottom only when already there. While reading older messages, use New messages to return to the bottom. Loading older history preserves the visible position. The composer resizes with the visual viewport and grows up to a bounded height.
+
+The first redesign is light-only and uses the existing blue palette. Stories remain a separate planned feature; their visual requirements are recorded in [.scratch/chat-ui-redesign/spec.md](.scratch/chat-ui-redesign/spec.md).

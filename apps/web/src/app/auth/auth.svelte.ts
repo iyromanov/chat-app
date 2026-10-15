@@ -1,3 +1,4 @@
+import { createRandomId } from '@shared/lib';
 import { io, type Socket } from 'socket.io-client';
 import { type ServerEvents, type CurrentUser } from '@chat/contracts';
 import { createMessages } from '@entities/message';
@@ -76,7 +77,7 @@ class Auth {
   logout = async () => {
     try {
       await this.api.AuthController_logout();
-      localStorage.setItem('chat:logout', crypto.randomUUID());
+      localStorage.setItem('chat:logout', createRandomId());
       this.anonymous();
     } catch (error) {
       if (error instanceof ApiError && error.body.code === 'UNAUTHORIZED')

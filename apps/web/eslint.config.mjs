@@ -87,6 +87,13 @@ export default [
     languageOptions: {
       globals: {
         SubmitEvent: 'readonly',
+        KeyboardEvent: 'readonly',
+        MouseEvent: 'readonly',
+        HTMLDivElement: 'readonly',
+        HTMLTextAreaElement: 'readonly',
+        Node: 'readonly',
+        ResizeObserver: 'readonly',
+        window: 'readonly',
         HTMLInputElement: 'readonly',
         Element: 'readonly',
         IntersectionObserver: 'readonly',

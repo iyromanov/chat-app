@@ -4,15 +4,7 @@
   import { ChatPage } from '@pages/chat';
   import { LoginPage } from '@pages/login';
   import { RegisterPage } from '@pages/register';
-  import {
-    Alert,
-    Button,
-    Card,
-    Heading,
-    Helper,
-    P,
-    Spinner,
-  } from 'flowbite-svelte';
+  import { Alert, Button, P, Spinner } from 'flowbite-svelte';
   import { createAuth } from '../auth';
   const auth = createAuth();
   let registering = $state(false);
@@ -59,23 +51,15 @@
     </div>
   </main>
 {:else if auth.state.status === 'authenticated'}
-  <main class="mx-auto flex max-w-6xl flex-col gap-6 p-4 sm:p-8">
-    <Card size="xl" class="gap-4 p-6">
-      <Helper>Private area</Helper>
-      <Heading tag="h1" class="text-3xl"
-        >Welcome, {auth.state.user.username}!</Heading
-      >
-
-      {#if logoutError}<Alert color="red" role="alert">{logoutError}</Alert
-        >{/if}
-      <Button onclick={logout}>Sign out</Button>
-    </Card>
+  <main>
     {#key auth.state.user.id}<ChatPage
         api={auth.api}
         conversations={auth.conversations}
         messages={auth.messages}
         userId={auth.state.user.id}
         onSent={auth.messageSaved}
+        onLogout={logout}
+        {logoutError}
       />{/key}
   </main>
 {:else if registering}

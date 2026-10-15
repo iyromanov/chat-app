@@ -1,83 +1,75 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
-  import { Alert, Button, Label, Textarea } from 'flowbite-svelte';
-  import { sendMessageSchema, type Message } from '@chat/contracts';
-  import { ApiError, type ApiClient } from '@shared/api';
+  import { tick } from 'svelte';
+  import { Alert, Button, Textarea } from 'flowbite-svelte';
+  import { Icon } from '@shared/ui';
+  import type { MessageComposerStore } from './message-composer.svelte';
   let {
-    api,
+    composer,
     conversationId,
-    onSent,
-  }: {
-    api: ApiClient;
-    conversationId: string;
-    onSent: (message: Message) => void;
-  } = $props();
-  let disposed = false;
-  onDestroy(() => {
-    disposed = true;
-  });
-  let draft = $state('');
-  let sending = $state(false);
-  let error = $state('');
-  let attempt:
-    { conversationId: string; text: string; attemptId: string } | undefined;
-  async function send(event: SubmitEvent): Promise<void> {
-    event.preventDefault();
-    if (sending) return;
-    const parsed = sendMessageSchema.safeParse({
-      text: draft,
-      attemptId: globalThis.crypto.randomUUID(),
-    });
-    if (!parsed.success) {
-      error = parsed.error.issues[0].message;
-      return;
-    }
-    if (
-      !attempt ||
-      attempt.text !== parsed.data.text ||
-      attempt.conversationId !== conversationId
-    )
-      attempt = { ...parsed.data, conversationId };
-    const current = attempt;
-    sending = true;
-    error = '';
-    try {
-      const { data } = await api.MessagesController_send({
-        params: { path: { conversationId: current.conversationId } },
-        body: { text: current.text, attemptId: current.attemptId },
+  }: { composer: MessageComposerStore; conversationId: string } = $props();
+  let draft = $derived(composer.drafts[conversationId]);
+  function resize(element: HTMLTextAreaElement) {
+    element.style.height = 'auto';
+    element.style.height = `${Math.min(element.scrollHeight, 160)}px`;
+  }
+  let textarea = $state<HTMLTextAreaElement>();
+  $effect(() => {
+    const text = draft.text;
+    const element = textarea;
+    if (element)
+      void tick().then(() => {
+        if (element.value === text) resize(element);
       });
-      if (!data) throw new Error('Missing saved message');
-      if (disposed) return;
-      onSent(data);
-      if (
-        conversationId === current.conversationId &&
-        draft.trim() === current.text
-      )
-        draft = '';
-      attempt = undefined;
-    } catch (cause) {
-      if (disposed) return;
-      error =
-        cause instanceof ApiError
-          ? cause.body.message
-          : 'Unable to confirm sending. Retry with the same text to avoid duplicates';
-    } finally {
-      sending = false;
+  });
+  function submit(event: SubmitEvent) {
+    event.preventDefault();
+    void composer.send(conversationId);
+  }
+  function keydown(event: KeyboardEvent) {
+    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+      event.preventDefault();
+      void composer.send(conversationId);
     }
   }
 </script>
 
-<form onsubmit={send} class="flex flex-col gap-3">
-  <Label for="message-text">Message</Label>
-  <Textarea
-    id="message-text"
-    bind:value={draft}
-    rows={3}
-    placeholder="Write a message"
-    disabled={sending}
-  />
-  {#if error}<Alert color="red" role="alert">{error}</Alert>{/if}
-  <Button type="submit" disabled={sending}
-    >{sending ? 'Sending…' : 'Send message'}</Button
-  >
+<form
+  onsubmit={submit}
+  class="composer shrink-0 border-t border-gray-200 bg-gray-50 px-3 py-3 md:px-5"
+>
+  {#if draft.error}<Alert color="red" role="alert" class="mb-3"
+      >{draft.error}</Alert
+    >{/if}
+  <div class="flex items-end gap-3">
+    {#key conversationId}
+      <Textarea
+        id="message-text"
+        bind:elementRef={textarea}
+        aria-label="Message"
+        bind:value={draft.text}
+        rows={1}
+        placeholder="Write a message"
+        disabled={draft.sending}
+        onkeydown={keydown}
+        oninput={(event) => resize(event.currentTarget)}
+        classes={{ div: 'min-w-0 flex-1' }}
+        class="block w-full max-h-40 min-h-11 resize-none rounded-2xl border-gray-200 bg-white px-4 py-3 text-sm leading-5 focus:border-blue-500 focus:ring-blue-500"
+      />
+    {/key}
+    <Button
+      type="submit"
+      pill
+      aria-label={draft.sending ? 'Sending message' : 'Send message'}
+      disabled={draft.sending || !draft.text.trim()}
+      class="h-11 w-11 shrink-0 p-0"
+    >
+      <Icon name="send" size={19} />
+    </Button>
+  </div>
 </form>
+
+<style>
+  .composer {
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
+</style>
