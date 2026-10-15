@@ -322,50 +322,36 @@ describe('Messages HTTP / Socket.io boundaries', () => {
     const first = (
       await request(app.getHttpServer())
         .get(path)
-        .query({ after: anchor.id })
         .set('Cookie', bob.cookie)
         .expect(200)
     ).body;
-    expect(first.items).toEqual(missed.slice(0, 50));
+    expect(first.items).toEqual(missed.slice(55));
+    expect(first.nextCursor).toEqual(expect.any(String));
     const second = (
       await request(app.getHttpServer())
         .get(path)
-        .query({ after: anchor.id, cursor: first.nextCursor })
+        .query({ cursor: first.nextCursor })
         .set('Cookie', bob.cookie)
         .expect(200)
     ).body;
-    expect(second.items).toEqual(missed.slice(50, 100));
+    expect(second.items).toEqual(missed.slice(5, 55));
+    expect(second.nextCursor).toEqual(expect.any(String));
     const third = (
       await request(app.getHttpServer())
         .get(path)
-        .query({ after: anchor.id, cursor: second.nextCursor })
+        .query({ cursor: second.nextCursor })
         .set('Cookie', bob.cookie)
         .expect(200)
     ).body;
-    expect(third).toEqual({ items: missed.slice(100), nextCursor: null });
-    for (const query of [
-      { cursor: first.nextCursor },
-      { after: missed[0].id, cursor: first.nextCursor },
-      { after: 'broken' },
-    ])
-      await request(app.getHttpServer())
-        .get(path)
-        .query(query)
-        .set('Cookie', bob.cookie)
-        .expect(400);
+    expect(third).toEqual({
+      items: [anchor, ...missed.slice(0, 5)],
+      nextCursor: null,
+    });
     await request(app.getHttpServer())
       .get(path)
-      .query({ after: anchor.id, cursor: first.nextCursor })
+      .query({ cursor: first.nextCursor })
       .set('Cookie', alice.cookie)
       .expect(400);
-    const fromStart = (
-      await request(app.getHttpServer())
-        .get(path)
-        .query({ after: 'start' })
-        .set('Cookie', bob.cookie)
-        .expect(200)
-    ).body;
-    expect(fromStart.items).toEqual([anchor, ...missed.slice(0, 49)]);
     expect((await send(105)).body).toEqual(missed[104]);
     const notification = new Promise((resolve) =>
       socket.once('message:created', resolve),

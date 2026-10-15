@@ -48,7 +48,6 @@ export class MessagesController {
       request.user.id,
       params.conversationId,
       query.cursor,
-      query.after,
     );
   }
 }

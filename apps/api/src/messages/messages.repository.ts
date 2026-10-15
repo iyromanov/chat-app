@@ -1,9 +1,4 @@
-import {
-  ConflictException,
-  Injectable,
-  NotFoundException,
-  OnModuleInit,
-} from '@nestjs/common';
+import { ConflictException, Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import type {
@@ -54,22 +49,10 @@ export class MessagesRepository implements OnModuleInit {
       return presentMessage(existing);
     }
   }
-  async position(
-    conversationId: string,
-    id: string,
-  ): Promise<{ key: string; id: string }> {
-    const message = await this.messages
-      .findOne({ _id: id, conversationId })
-      .lean()
-      .exec();
-    if (!message) throw new NotFoundException('Message not found');
-    return { key: message.createdAt.toISOString(), id };
-  }
   async list(
     conversationId: string,
     limit: number,
     after?: { key: string; id: string },
-    newer = false,
   ): Promise<PublicMessage[]> {
     const rows = await this.messages
       .find({
@@ -77,16 +60,16 @@ export class MessagesRepository implements OnModuleInit {
         ...(after
           ? {
               $or: [
-                { createdAt: { [newer ? '$gt' : '$lt']: new Date(after.key) } },
+                { createdAt: { $lt: new Date(after.key) } },
                 {
                   createdAt: new Date(after.key),
-                  _id: { [newer ? '$gt' : '$lt']: after.id },
+                  _id: { $lt: after.id },
                 },
               ],
             }
           : {}),
       })
-      .sort({ createdAt: newer ? 1 : -1, _id: newer ? 1 : -1 })
+      .sort({ createdAt: -1, _id: -1 })
       .limit(limit)
       .lean()
       .exec();

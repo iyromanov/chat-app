@@ -674,7 +674,6 @@ export class Api<
          * @maxLength 2048
          */
         cursor?: string;
-        after?: string | "start";
       },
       params: RequestParams = {},
     ) =>

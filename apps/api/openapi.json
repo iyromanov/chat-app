@@ -491,25 +491,6 @@
               "maxLength": 2048,
               "type": "string"
             }
-          },
-          {
-            "name": "after",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "pattern": "^[a-f0-9]{24}$"
-                },
-                {
-                  "type": "string",
-                  "enum": [
-                    "start"
-                  ]
-                }
-              ]
-            }
           }
         ],
         "responses": {
