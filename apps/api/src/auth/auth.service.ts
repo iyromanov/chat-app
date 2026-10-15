@@ -7,6 +7,12 @@ import { LIFETIME } from './auth.constants';
 import { Clock } from '../common/clock';
 import { UsersService } from '../users/users.service';
 
+type LoginResult = {
+  expiresAt: Date;
+  user: CurrentUser;
+  token: string;
+};
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -16,15 +22,15 @@ export class AuthService {
     private readonly sockets: AuthGateway,
   ) {}
 
-  logout(loginId: string) {
+  logout(loginId: string): void {
     this.sockets.logout(loginId);
   }
 
-  async register(input: Registration) {
+  async register(input: Registration): Promise<LoginResult> {
     return this.login(await this.users.register(input));
   }
 
-  async validateCredentials(input: Login) {
+  async validateCredentials(input: Login): Promise<CurrentUser> {
     const user = await this.users.findByCredentials(input);
     if (!user) {
       throw new UnauthorizedException({
@@ -35,7 +41,7 @@ export class AuthService {
     return user;
   }
 
-  async login(user: CurrentUser) {
+  async login(user: CurrentUser): Promise<LoginResult> {
     const issuedAt = Math.floor(this.clock.now().getTime() / 1000);
     return {
       expiresAt: new Date((issuedAt + LIFETIME) * 1000),

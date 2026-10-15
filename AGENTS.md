@@ -21,7 +21,8 @@ Before implementing or reviewing code, read `CODING_STANDARDS.md`.
 Before writing, refactoring, or reviewing NestJS code:
 
 - Read `.agents/skills/nestjs-best-practices/SKILL.md`.
-- Read the relevant rule files referenced by the skill.
+- Read `.agents/skills/nestjs-clean-typescript/SKILL.md`.
+- Read the relevant rule files referenced by these skills.
 - Follow `CODING_STANDARDS.md` and existing ADRs when they conflict with generic skill recommendations.
 
 ### Svelte

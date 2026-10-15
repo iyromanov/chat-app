@@ -2,6 +2,7 @@ import { Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Clock } from '../common/clock';
+import { isDuplicateKeyError } from '../common/mongo-errors';
 import { Conversation } from './conversation.schema';
 
 export type ConversationRecord = {
@@ -21,16 +22,6 @@ function toRecord(conversation: StoredConversation): ConversationRecord {
   };
 }
 
-function isDuplicateKeyError(error: unknown): boolean {
-  const duplicateKeyCode = 11000;
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    error.code === duplicateKeyCode
-  );
-}
-
 @Injectable()
 export class ConversationsRepository implements OnModuleInit {
   constructor(
@@ -39,11 +30,14 @@ export class ConversationsRepository implements OnModuleInit {
     private readonly clock: Clock,
   ) {}
 
-  async onModuleInit() {
+  async onModuleInit(): Promise<void> {
     await this.conversations.init();
   }
 
-  async getOrCreate(userId: string, otherId: string) {
+  async getOrCreate(
+    userId: string,
+    otherId: string,
+  ): Promise<{ conversation: ConversationRecord; created: boolean }> {
     const participants = [userId, otherId].sort();
     const pairKey = participants.join(':');
     const existing = await this.findByPairKey(pairKey);
@@ -71,7 +65,7 @@ export class ConversationsRepository implements OnModuleInit {
     userId: string,
     limit: number,
     after?: ConversationPosition,
-  ) {
+  ): Promise<ConversationRecord[]> {
     const rows = await this.conversations
       .find({
         participants: userId,
@@ -91,7 +85,10 @@ export class ConversationsRepository implements OnModuleInit {
     return rows.map(toRecord);
   }
 
-  async findForParticipant(conversationId: string, userId: string) {
+  async findForParticipant(
+    conversationId: string,
+    userId: string,
+  ): Promise<ConversationRecord | null> {
     if (!Types.ObjectId.isValid(conversationId)) return null;
     const conversation = await this.conversations
       .findOne({ _id: conversationId, participants: userId })
@@ -100,7 +97,9 @@ export class ConversationsRepository implements OnModuleInit {
     return conversation ? toRecord(conversation) : null;
   }
 
-  private async findByPairKey(pairKey: string) {
+  private async findByPairKey(
+    pairKey: string,
+  ): Promise<ConversationRecord | null> {
     const conversation = await this.conversations
       .findOne({ pairKey })
       .lean()

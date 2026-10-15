@@ -1,7 +1,6 @@
-import type { HydratedDocument } from 'mongoose';
 import type { CurrentUser } from '@chat/contracts';
-import type { User } from './schemas/user.schema';
+import type { UserRecord } from './user.record';
 
-export function publicUser(user: HydratedDocument<User>): CurrentUser {
-  return { id: user.id as string, email: user.email, username: user.username };
+export function publicUser(user: UserRecord): CurrentUser {
+  return { id: user.id, email: user.email, username: user.username };
 }

@@ -1,113 +1,91 @@
-import {
-  Injectable,
-  ConflictException,
-  OnModuleInit,
-  Inject,
-} from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
+import { Injectable, ConflictException, Inject } from '@nestjs/common';
 import { CONFIG, type Config } from '../common/config';
 import { encodeCursor, decodeCursor } from '../common/cursor';
-import { Model } from 'mongoose';
-import type { Login, Registration } from '@chat/contracts';
-import { User } from './schemas/user.schema';
+import type {
+  CurrentUser,
+  Login,
+  PublicUser,
+  Registration,
+  UsersPage,
+} from '@chat/contracts';
+import { UsersRepository } from './users.repository';
 import { publicUser } from './user.mapper';
 import { hashPassword, verifyPassword } from './password-hasher';
 
+const PAGE_SIZE = 50;
+
+/** Handles registration, credential verification and user discovery. */
 @Injectable()
-export class UsersService implements OnModuleInit {
+export class UsersService {
   constructor(
-    @InjectModel(User.name) private readonly users: Model<User>,
+    private readonly users: UsersRepository,
     @Inject(CONFIG) private readonly config: Config,
   ) {}
-  async onModuleInit() {
-    await this.users.init();
+
+  /** Registers an account or rejects an email or username already in use. */
+  async register(input: Registration): Promise<CurrentUser> {
+    const passwordHash: string = await hashPassword(input.password);
+    const user = await this.users.createIfUnique({
+      email: input.email,
+      username: input.username,
+      passwordHash,
+    });
+    if (!user)
+      throw new ConflictException({
+        code: 'USER_EXISTS',
+        message: 'Email or username is already taken',
+      });
+    return publicUser(user);
   }
-  async register(input: Registration) {
-    try {
-      return publicUser(
-        await this.users.create({
-          email: input.email.toLowerCase(),
-          username: input.username,
-          normalizedEmail: input.email.toLowerCase(),
-          normalizedUsername: input.username.toLowerCase(),
-          passwordHash: await hashPassword(input.password),
-        }),
-      );
-    } catch (error) {
-      if (
-        typeof error === 'object' &&
-        error !== null &&
-        'code' in error &&
-        error.code === 11000
-      ) {
-        throw new ConflictException({
-          code: 'USER_EXISTS',
-          message: 'Email or username is already taken',
-        });
-      }
-      throw error;
-    }
-  }
-  async findByCredentials(input: Login) {
-    const user = await this.users
-      .findOne({ normalizedEmail: input.email.toLowerCase() })
-      .select('+passwordHash')
-      .exec();
+
+  /** Returns the account only when the supplied password matches. */
+  async findByCredentials(input: Login): Promise<CurrentUser | null> {
+    const user = await this.users.findByEmail(input.email);
     if (!user || !(await verifyPassword(input.password, user.passwordHash))) {
       return null;
     }
     return publicUser(user);
   }
 
-  async list(currentId: string, search: string, cursor?: string) {
-    const normalized = search.toLowerCase();
-    const scope = `users:${currentId}:${normalized}`;
+  /** Returns a page of other users with a cursor bound to viewer and search. */
+  async list(
+    currentId: string,
+    search: string,
+    cursor?: string,
+  ): Promise<UsersPage> {
+    const normalized: string = search.toLowerCase();
+    const scope: string = `users:${currentId}:${normalized}`;
     const after = decodeCursor(cursor, scope, this.config.JWT_SECRET);
-    const escaped = normalized.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const users = await this.users
-      .find({
-        _id: { $ne: currentId },
-        normalizedUsername: { $regex: escaped },
-        ...(after
-          ? {
-              $or: [
-                { normalizedUsername: { $gt: after.key } },
-                { normalizedUsername: after.key, _id: { $gt: after.id } },
-              ],
-            }
-          : {}),
-      })
-      .sort({ normalizedUsername: 1, _id: 1 })
-      .limit(51)
-      .lean()
-      .exec();
-    const page = users.slice(0, 50);
+    const users = await this.users.listOthers({
+      currentId,
+      normalizedSearch: normalized,
+      limit: PAGE_SIZE + 1,
+      after: after
+        ? { normalizedUsername: after.key, id: after.id }
+        : undefined,
+    });
+    const page = users.slice(0, PAGE_SIZE);
     const last = page.at(-1);
     return {
-      items: page.map((user) => ({
-        id: user._id.toString(),
-        username: user.username,
-      })),
+      items: page.map((user) => ({ id: user.id, username: user.username })),
       nextCursor:
-        users.length > 50 && last
+        users.length > PAGE_SIZE && last
           ? encodeCursor(
-              { scope, key: last.normalizedUsername, id: last._id.toString() },
+              { scope, key: last.normalizedUsername, id: last.id },
               this.config.JWT_SECRET,
             )
           : null,
     };
   }
-  async findPublicByIds(ids: string[]) {
-    return (
-      await this.users
-        .find({ _id: { $in: ids } })
-        .select('username')
-        .lean()
-        .exec()
-    ).map((user) => ({ id: user._id.toString(), username: user.username }));
+
+  /** Provides user summaries to other application modules. */
+  async findPublicByIds(ids: string[]): Promise<PublicUser[]> {
+    return this.users.findPublicByIds(ids);
   }
-  async findCurrent(id: string) {
-    const user = await this.users.findById(id).exec();
+
+  /** Restores the current account without exposing credentials. */
+  async findCurrent(id: string): Promise<CurrentUser | null> {
+    const user = await this.users.findById(id);
     return user ? publicUser(user) : null;
   }
 }

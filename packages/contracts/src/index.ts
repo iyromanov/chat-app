@@ -54,6 +54,8 @@ export const usersPageSchema = z.object({
   nextCursor: z.union([z.string().min(1), z.null()]),
 });
 
+export type UsersPage = z.infer<typeof usersPageSchema>;
+
 export const objectIdSchema = z
   .string()
   .regex(/^[a-f0-9]{24}$/, 'Enter a valid user ID');
@@ -70,3 +72,4 @@ export const conversationsPageSchema = z.object({
   items: z.array(conversationSchema),
   nextCursor: z.union([z.string().min(1), z.null()]),
 });
+export type ConversationsPage = z.infer<typeof conversationsPageSchema>;

@@ -4,25 +4,22 @@ import {
   Inject,
   NotFoundException,
 } from '@nestjs/common';
-import type { PublicUser } from '@chat/contracts';
+import type {
+  Conversation,
+  ConversationsPage,
+  PublicUser,
+} from '@chat/contracts';
 import { UsersService } from '../users/users.service';
 import { CONFIG, type Config } from '../common/config';
 import { decodeCursor, encodeCursor } from '../common/cursor';
 import { UserSocketsService } from '../realtime/user-sockets.service';
-import { ConversationsRepository } from './conversations.repository';
+import {
+  ConversationsRepository,
+  type ConversationRecord,
+} from './conversations.repository';
 import { presentConversation } from './conversation.mapper';
 
 const PAGE_SIZE = 50;
-
-function requireUser(users: Map<string, PublicUser>, id: string | undefined) {
-  const user = id === undefined ? undefined : users.get(id);
-  if (!user)
-    throw new NotFoundException({
-      code: 'USER_NOT_FOUND',
-      message: 'User not found',
-    });
-  return user;
-}
 
 @Injectable()
 export class ConversationsService {
@@ -33,15 +30,15 @@ export class ConversationsService {
     @Inject(CONFIG) private readonly config: Config,
   ) {}
 
-  async start(userId: string, otherId: string) {
+  async start(userId: string, otherId: string): Promise<Conversation> {
     if (userId === otherId)
       throw new BadRequestException({
         code: 'SELF_CONVERSATION',
         message: 'Choose another user',
       });
     const users = await this.loadUsers([userId, otherId]);
-    const currentUser = requireUser(users, userId);
-    const counterpart = requireUser(users, otherId);
+    const currentUser = this.getUser(users, userId);
+    const counterpart = this.getUser(users, otherId);
     const { conversation, created } = await this.conversations.getOrCreate(
       userId,
       otherId,
@@ -58,7 +55,7 @@ export class ConversationsService {
     return response;
   }
 
-  async list(userId: string, cursor?: string) {
+  async list(userId: string, cursor?: string): Promise<ConversationsPage> {
     const scope = `conversations:${userId}`;
     const after = decodeCursor(cursor, scope, this.config.JWT_SECRET);
     const rows = await this.conversations.listForParticipant(
@@ -72,7 +69,7 @@ export class ConversationsService {
     return {
       items: page.map((row) => {
         const counterpartId = row.participants.find((id) => id !== userId);
-        return presentConversation(row, requireUser(users, counterpartId));
+        return presentConversation(row, this.getUser(users, counterpartId));
       }),
       nextCursor:
         rows.length > PAGE_SIZE && last
@@ -84,7 +81,10 @@ export class ConversationsService {
     };
   }
 
-  async requireParticipant(conversationId: string, userId: string) {
+  async getForParticipant(
+    conversationId: string,
+    userId: string,
+  ): Promise<Pick<ConversationRecord, 'id' | 'participants'>> {
     const conversation = await this.conversations.findForParticipant(
       conversationId,
       userId,
@@ -97,7 +97,20 @@ export class ConversationsService {
     return { id: conversation.id, participants: conversation.participants };
   }
 
-  private async loadUsers(ids: string[]) {
+  private getUser(
+    users: Map<string, PublicUser>,
+    id: string | undefined,
+  ): PublicUser {
+    const user = id === undefined ? undefined : users.get(id);
+    if (!user)
+      throw new NotFoundException({
+        code: 'USER_NOT_FOUND',
+        message: 'User not found',
+      });
+    return user;
+  }
+
+  private async loadUsers(ids: string[]): Promise<Map<string, PublicUser>> {
     const users = await this.users.findPublicByIds([...new Set(ids)]);
     return new Map(users.map((user) => [user.id, user]));
   }
