@@ -1,8 +1,4 @@
-import {
-  currentUserSchema,
-  type Conversation,
-  type ServerEvents,
-} from '@chat/contracts';
+import { currentUserSchema, type ServerEvents } from '@chat/contracts';
 import {
   OnGatewayInit,
   WebSocketGateway,
@@ -13,14 +9,19 @@ import cookieParser from 'cookie-parser';
 import passport from 'passport';
 import type { Response, NextFunction } from 'express';
 import { Clock } from '../common/clock';
+import { UserSocketsService } from '../realtime/user-sockets.service';
 import type { AuthRequest } from './auth-request';
 
 @WebSocketGateway()
 export class AuthGateway implements OnGatewayInit {
   @WebSocketServer() server!: Server<Record<string, never>, ServerEvents>;
-  constructor(private readonly clock: Clock) {}
+  constructor(
+    private readonly clock: Clock,
+    private readonly userSockets: UserSocketsService,
+  ) {}
 
   afterInit(server: Server) {
+    this.userSockets.attachServer(server);
     server.use((socket, next) => {
       const request = socket.request as AuthRequest;
       cookieParser()(
@@ -46,17 +47,13 @@ export class AuthGateway implements OnGatewayInit {
   handleConnection(socket: Socket) {
     const { loginId, expiresAt } = socket.data.auth as AuthRequest['auth'];
     void socket.join(`login:${loginId}`);
-    void socket.join(`user:${socket.data.userId}`);
+    void this.userSockets.joinUser(socket, socket.data.userId as string);
     socket.emit('auth:ready', { expiresAt: expiresAt.toISOString() });
     const cancel = this.clock.scheduleAt(expiresAt, () => {
       socket.emit('auth:ended');
       socket.disconnect(true);
     });
     socket.once('disconnect', cancel);
-  }
-
-  conversationCreated(userId: string, conversation: Conversation) {
-    this.server.to(`user:${userId}`).emit('conversation:created', conversation);
   }
 
   logout(loginId: string) {

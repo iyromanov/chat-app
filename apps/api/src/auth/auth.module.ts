@@ -5,6 +5,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { CONFIG, type Config } from '../common/config';
 import { UsersModule } from '../users/users.module';
+import { RealtimeModule } from '../realtime/realtime.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { AuthGuard } from './auth.guard';
@@ -16,6 +17,7 @@ import { JWT_AUDIENCE, JWT_ISSUER, LIFETIME } from './auth.constants';
 @Module({
   imports: [
     UsersModule,
+    RealtimeModule,
     PassportModule.register({ session: false }),
     JwtModule.registerAsync({
       inject: [CONFIG],
@@ -40,6 +42,6 @@ import { JWT_AUDIENCE, JWT_ISSUER, LIFETIME } from './auth.constants';
     LocalStrategy,
     JwtStrategy,
   ],
-  exports: [AuthService, AuthGuard, AuthGateway],
+  exports: [AuthService, AuthGuard],
 })
 export class AuthModule {}
