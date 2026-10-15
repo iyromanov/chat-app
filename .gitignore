@@ -1,0 +1,14 @@
+node_modules/
+.pnpm-store/
+.agents/skills/
+.scratch/
+dist/
+build/
+.svelte-kit/
+.env
+.env.*
+!.env.example
+coverage/
+*.log
+*.tsbuildinfo
+.DS_Store

@@ -1,0 +1,27 @@
+{
+  "name": "chat-app",
+  "private": true,
+  "packageManager": "pnpm@10.33.4",
+  "scripts": {
+    "dev": "pnpm --filter @chat/contracts build && pnpm --parallel --filter './apps/*' dev",
+    "build": "pnpm --filter @chat/contracts build && pnpm --filter @chat/api build && pnpm --filter @chat/web build",
+    "check": "pnpm --filter @chat/contracts build && pnpm --filter @chat/api check && pnpm --filter @chat/web check && pnpm lint && pnpm format:check && pnpm generate:check",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "pnpm --filter @chat/contracts build && pnpm --filter @chat/api test",
+    "generate": "pnpm --filter @chat/contracts build && pnpm --filter @chat/api openapi && openapi-typescript apps/api/openapi.json -o apps/web/src/shared/api/schema.d.ts && node scripts/generate-api-client.mjs",
+    "generate:check": "node scripts/check-generated.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.0",
+    "eslint": "^9.39.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-svelte": "^3.12.0",
+    "typescript-eslint": "^8.46.0",
+    "prettier": "^3.6.2",
+    "prettier-plugin-svelte": "^3.4.0",
+    "openapi-typescript": "^7.10.1",
+    "typescript": "^5.9.3"
+  }
+}

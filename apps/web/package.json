@@ -1,0 +1,29 @@
+{
+  "name": "@chat/web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "start": "node build"
+  },
+  "dependencies": {
+    "@chat/contracts": "workspace:*",
+    "flowbite-svelte": "^1.33.1",
+    "openapi-fetch": "^0.15.0"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-node": "^5.3.2",
+    "@sveltejs/kit": "^2.43.0",
+    "@sveltejs/vite-plugin-svelte": "^6.2.1",
+    "@tailwindcss/vite": "^4.1.14",
+    "@types/node": "^24.7.0",
+    "flowbite": "^3.1.2",
+    "svelte": "^5.39.0",
+    "svelte-check": "^4.3.3",
+    "tailwindcss": "^4.1.14",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.9"
+  }
+}
