@@ -6,6 +6,7 @@ class Conversations {
   private generation = 0;
 
   private refreshPending = false;
+  private loadingTask: Promise<void> | null = null;
 
   items = $state.raw<Conversation[]>([]);
 
@@ -43,24 +44,31 @@ class Conversations {
     const conversation = this.items.find(
       (item) => item.id === message.conversationId,
     );
-    if (conversation) this.upsert({ ...conversation, lastMessage: message });
-    else this.load();
+    if (!conversation) return false;
+    this.upsert({ ...conversation, lastMessage: message });
+    return true;
   };
 
   clear = () => {
     this.generation++;
     this.refreshPending = false;
+    this.loadingTask = null;
     this.items = [];
     this.nextCursor = null;
     this.loading = false;
     this.error = '';
   };
 
-  load = async (more = false) => {
+  load = (more = false): Promise<void> => {
     if (this.loading) {
       if (!more) this.refreshPending = true;
-      return;
+      return this.loadingTask ?? Promise.resolve();
     }
+    this.loadingTask = this.loadPages(more);
+    return this.loadingTask;
+  };
+
+  private async loadPages(more: boolean): Promise<void> {
     if (more && !this.nextCursor) return;
     const generation = this.generation;
     this.loading = true;
@@ -88,11 +96,11 @@ class Conversations {
         this.loading = false;
         if (this.refreshPending) {
           this.refreshPending = false;
-          this.load();
+          await this.loadPages(false);
         }
       }
     }
-  };
+  }
 }
 export type ConversationStore = Conversations;
 

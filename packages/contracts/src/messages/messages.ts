@@ -9,7 +9,6 @@ export const messageTextSchema = z
   .max(2000, 'Use at most 2000 characters');
 export const sendMessageSchema = z.object({
   text: messageTextSchema,
-  attemptId: z.string().min(1).max(100),
 });
 export type SendMessage = z.infer<typeof sendMessageSchema>;
 export const messageSchema = z.object({
@@ -17,7 +16,6 @@ export const messageSchema = z.object({
   conversationId: objectIdSchema,
   senderId: objectIdSchema,
   text: messageTextSchema,
-  attemptId: z.string(),
   createdAt: z.iso.datetime(),
 });
 export type Message = z.infer<typeof messageSchema>;

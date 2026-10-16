@@ -449,16 +449,6 @@
                 }
               }
             }
-          },
-          "409": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDto"
-                }
-              }
-            }
           }
         },
         "security": [
@@ -744,9 +734,6 @@
                 "minLength": 1,
                 "maxLength": 2000
               },
-              "attemptId": {
-                "type": "string"
-              },
               "createdAt": {
                 "type": "string",
                 "format": "date-time",
@@ -758,7 +745,6 @@
               "conversationId",
               "senderId",
               "text",
-              "attemptId",
               "createdAt"
             ],
             "nullable": true
@@ -823,9 +809,6 @@
                       "minLength": 1,
                       "maxLength": 2000
                     },
-                    "attemptId": {
-                      "type": "string"
-                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time",
@@ -837,7 +820,6 @@
                     "conversationId",
                     "senderId",
                     "text",
-                    "attemptId",
                     "createdAt"
                   ],
                   "nullable": true
@@ -869,16 +851,10 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 2000
-          },
-          "attemptId": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 100
           }
         },
         "required": [
-          "text",
-          "attemptId"
+          "text"
         ]
       },
       "MessageDto": {
@@ -901,9 +877,6 @@
             "minLength": 1,
             "maxLength": 2000
           },
-          "attemptId": {
-            "type": "string"
-          },
           "createdAt": {
             "type": "string",
             "format": "date-time",
@@ -915,7 +888,6 @@
           "conversationId",
           "senderId",
           "text",
-          "attemptId",
           "createdAt"
         ]
       },
@@ -944,9 +916,6 @@
                   "minLength": 1,
                   "maxLength": 2000
                 },
-                "attemptId": {
-                  "type": "string"
-                },
                 "createdAt": {
                   "type": "string",
                   "format": "date-time",
@@ -958,7 +927,6 @@
                 "conversationId",
                 "senderId",
                 "text",
-                "attemptId",
                 "createdAt"
               ]
             }

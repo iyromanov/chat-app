@@ -1,12 +1,14 @@
 import type { CurrentUser } from '@chat/contracts/users';
 import { createApi } from '@shared/api';
 import { AuthStore, SessionController, type AuthView } from '../auth';
-import { createChat } from '../chat';
+import { ChatController } from '../chat';
+import { createConversations } from '@entities/conversation';
+import { createMessages } from '@entities/message';
 import { createRealtime } from '../realtime';
 
 type AuthenticatedContext = {
   api: ReturnType<typeof createApi>;
-  chat: ReturnType<typeof createChat>;
+  chat: ChatController;
   connectionState: string;
   dispose: () => void;
 };
@@ -44,7 +46,11 @@ export function createAppRuntime(
       },
     });
 
-    const chat = createChat(api, user.id);
+    const chat = new ChatController(
+      api,
+      createConversations(api),
+      createMessages(api),
+    );
     let connectionState = $state('Connecting…');
     const realtime = createRealtime(options.baseUrl, {
       connected: () => {

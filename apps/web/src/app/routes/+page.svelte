@@ -51,7 +51,7 @@
         conversations={context.chat.conversations}
         messages={context.chat.messages}
         userId={auth.state.user.id}
-        composer={context.chat.composer}
+        onSend={context.chat.sendMessage}
         onLogout={runtime.session.logout}
       />{/key}
   </main>

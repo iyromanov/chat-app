@@ -9,7 +9,6 @@ export function presentMessage(row: StoredMessage): PublicMessage {
     conversationId: row.conversationId,
     senderId: row.senderId,
     text: row.text,
-    attemptId: row.attemptId,
     createdAt: row.createdAt.toISOString(),
   };
 }

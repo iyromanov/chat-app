@@ -1,11 +1,10 @@
-import { ConflictException, Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import type {
   Message as PublicMessage,
   SendMessage,
 } from '@chat/contracts/messages';
-import { isDuplicateKeyError } from '../common/mongo-errors';
 import { Clock } from '../common/clock';
 import { Message } from './message.schema';
 import { presentMessage } from './message.mapper';
@@ -17,37 +16,31 @@ export class MessagesRepository implements OnModuleInit {
   ) {}
   async onModuleInit(): Promise<void> {
     await this.messages.init();
+    // Existing documents remain readable; only the obsolete constraint is removed.
+    try {
+      await this.messages.collection.dropIndex(
+        'conversationId_1_senderId_1_attemptId_1',
+      );
+    } catch (error) {
+      if (!(error instanceof Error && 'code' in error && error.code === 27))
+        throw error;
+    }
   }
   async create(
     conversationId: string,
     senderId: string,
     input: SendMessage,
   ): Promise<PublicMessage> {
-    try {
-      return presentMessage(
-        (
-          await this.messages.create({
-            ...input,
-            conversationId,
-            senderId,
-            createdAt: this.clock.now(),
-          })
-        ).toObject(),
-      );
-    } catch (error) {
-      if (!isDuplicateKeyError(error)) throw error;
-      const existing = await this.messages
-        .findOne({ conversationId, senderId, attemptId: input.attemptId })
-        .lean()
-        .exec();
-      if (!existing) throw error;
-      if (existing.text !== input.text)
-        throw new ConflictException({
-          code: 'MESSAGE_ATTEMPT_CONFLICT',
-          message: 'This attempt was already used for different text',
-        });
-      return presentMessage(existing);
-    }
+    return presentMessage(
+      (
+        await this.messages.create({
+          text: input.text,
+          conversationId,
+          senderId,
+          createdAt: this.clock.now(),
+        })
+      ).toObject(),
+    );
   }
   async list(
     conversationId: string,

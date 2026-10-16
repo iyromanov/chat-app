@@ -14,10 +14,7 @@ class Messages {
   error = $state('');
   failedLoadMore = $state(false);
 
-  constructor(
-    private readonly api: ApiClient,
-    private readonly onLoaded: (message: Message) => void,
-  ) {}
+  constructor(private readonly api: ApiClient) {}
 
   upsert = (message: Message) => {
     if (message.conversationId !== this.conversationId) return;
@@ -74,7 +71,6 @@ class Messages {
         if (generation !== this.generation || !data) return;
         for (const message of data.items) {
           this.upsert(message);
-          this.onLoaded(message);
         }
         oldestLoadedId = data.items[0]?.id ?? oldestLoadedId;
         reachedBoundary ||= data.items.some(
@@ -103,9 +99,6 @@ class Messages {
 }
 export type MessageStore = Messages;
 
-export function createMessages(
-  api: ApiClient,
-  onLoaded: (message: Message) => void,
-): MessageStore {
-  return new Messages(api, onLoaded);
+export function createMessages(api: ApiClient): MessageStore {
+  return new Messages(api);
 }

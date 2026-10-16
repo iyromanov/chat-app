@@ -10,13 +10,12 @@
   import type { ConversationStore } from '@entities/conversation';
   import { createUserSearch } from '@features/find-users';
   import { StartConversation } from '@features/start-conversation';
-  import type { MessageComposerStore } from '@features/send-message';
   let {
     api,
     conversations,
     messages,
     userId,
-    composer,
+    onSend,
     onLogout,
     connectionState,
   }: {
@@ -24,7 +23,7 @@
     conversations: ConversationStore;
     messages: MessageStore;
     userId: string;
-    composer: MessageComposerStore;
+    onSend: (conversationId: string, text: string) => Promise<void>;
     onLogout: () => Promise<void>;
     connectionState: string;
   } = $props();
@@ -45,7 +44,6 @@
 
   function select(id: string) {
     selectedId = id;
-    composer.open(id);
     messages.open(id);
     view = 'chat';
   }
@@ -298,7 +296,7 @@
         {messages}
         {connectionState}
         conversation={selected}
-        {composer}
+        {onSend}
         {userId}
         onBack={back}
       />

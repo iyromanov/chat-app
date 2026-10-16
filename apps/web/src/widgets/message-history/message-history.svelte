@@ -4,23 +4,20 @@
   import type { MessageStore } from '@entities/message';
   import { UserAvatar } from '@entities/user';
   import type { Conversation } from '@chat/contracts/conversations';
-  import {
-    SendMessage,
-    type MessageComposerStore,
-  } from '@features/send-message';
+  import { SendMessage } from '@features/send-message';
   import { Icon } from '@shared/ui';
   import { formatTime } from '@shared/lib';
   let {
     messages,
     conversation,
-    composer,
+    onSend,
     userId,
     onBack,
     connectionState,
   }: {
     messages: MessageStore;
     conversation: Conversation;
-    composer: MessageComposerStore;
+    onSend: (conversationId: string, text: string) => Promise<void>;
     userId: string;
     onBack: () => void;
     connectionState: string;
@@ -183,4 +180,6 @@
       <Button pill size="sm" onclick={bottom}>New messages ↓</Button>
     </div>{/if}
 </div>
-<SendMessage {composer} conversationId={conversation.id} />
+{#key conversation.id}
+  <SendMessage {onSend} conversationId={conversation.id} />
+{/key}

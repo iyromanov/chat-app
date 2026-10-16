@@ -6,7 +6,6 @@ import {
   ApiBadRequestResponse,
   ApiNotFoundResponse,
   ApiUnauthorizedResponse,
-  ApiConflictResponse,
 } from '@nestjs/swagger';
 import type { Message, MessagesPage } from '@chat/contracts/messages';
 import type { AuthRequest } from '../auth/auth-request';
@@ -29,7 +28,6 @@ export class MessagesController {
   constructor(private readonly messages: MessagesService) {}
   @Post()
   @ApiCreatedResponse({ type: MessageDto })
-  @ApiConflictResponse({ type: ErrorDto })
   send(
     @Req() request: AuthRequest,
     @Param() params: MessageParamsDto,

@@ -43,7 +43,6 @@ const message = {
   conversationId: conversation.id,
   senderId: conversation.counterpart.id,
   text: 'Hello',
-  attemptId: 'first-message',
   createdAt: '2026-10-15T10:01:00.000Z',
 };
 
@@ -391,7 +390,7 @@ test('restoration, socket events and reconnect share chat synchronization', asyn
   await until(() => !context.chat.messages.loading);
   socket.emit('message:created', message);
   await until(() => context.chat.messages.items.length === 1);
-  context.chat.messageSaved(message);
+  context.chat.applySavedMessage(message);
   assert.equal(context.chat.messages.items.length, 1);
   assert.equal(context.chat.conversations.items[0].lastMessage.id, message.id);
   socket.emit('message:created', { ...message, id: 'invalid' });
@@ -464,7 +463,7 @@ test('a new login isolates late HTTP failures, logout responses and store loads'
   meResponse.resolve();
   logoutResponse.resolve();
   await Promise.all([rejected, logout]);
-  previous.chat.messageSaved(message);
+  previous.chat.applySavedMessage(message);
   previous.chat.conversationCreated(conversation);
   await until(
     () =>
@@ -616,7 +615,7 @@ test('API client serializes query, path and JSON body and preserves auth headers
   assert.deepEqual(response.data, user);
   assert.equal(response.headers.get('X-Auth-Expires-At'), deadline);
   await api.users.list({ search: 'A & B', cursor: 'next+page=' });
-  const body = { text: 'Hello\nWorld', attemptId: 'send-once' };
+  const body = { text: 'Hello\nWorld' };
   await api.messages.send(conversation.id, body);
   await api.messages.list(conversation.id, { cursor: undefined });
   assert.deepEqual(
@@ -741,55 +740,6 @@ test('initial and multi-page recovery merge live messages through the REST-loade
     [message.id, missed.id, live.id, boundary.id],
   );
   assert.equal(context.chat.messages.nextCursor, 'older-reconciled');
-});
-
-test('uncertain send retries its original payload while edited text remains a separate draft', async (t) => {
-  const { runtime, routes, sockets } = await fixture(t);
-  const context = await signIn(runtime);
-  await until(() => sockets.length === 1);
-  const path = `/api/conversations/${conversation.id}/messages`;
-  const bodies = [];
-  let serverError = false;
-  routes.set(path, (response, request) => {
-    let body = '';
-    request.on('data', (chunk) => (body += chunk));
-    request.on('end', () => {
-      const input = JSON.parse(body);
-      bodies.push(input);
-      if (bodies.length === 1) return response.destroy();
-      if (serverError)
-        return json(
-          response,
-          { code: 'INTERNAL_ERROR', message: 'Unavailable' },
-          503,
-        );
-      json(response, { ...message, senderId: user.id, ...input }, 201);
-    });
-  });
-  const composer = context.chat.composer;
-  composer.open(conversation.id);
-  const draft = composer.drafts[conversation.id];
-  draft.text = 'Original message';
-  await composer.send(conversation.id);
-  assert.equal(draft.status, 'uncertain');
-  draft.text = 'Edited draft';
-  await composer.send(conversation.id);
-  assert.equal(bodies.length, 1);
-  await composer.retry(conversation.id);
-  assert.deepEqual(bodies[1], bodies[0]);
-  assert.equal(draft.status, 'confirmed');
-  assert.equal(draft.text, 'Edited draft');
-  serverError = true;
-  await composer.send(conversation.id);
-  assert.equal(draft.status, 'uncertain');
-  assert.notEqual(bodies[2].attemptId, bodies[0].attemptId);
-  sockets[0].emit('message:created', {
-    ...message,
-    senderId: user.id,
-    ...bodies[2],
-  });
-  await until(() => draft.status === 'confirmed');
-  assert.equal(draft.text, '');
 });
 
 test('logout during recovery discards late pages and never restarts private loads', async (t) => {
@@ -1017,4 +967,180 @@ test('an initially empty history reconciles all 105 missed messages even when an
     missed.map((item) => item.id),
   );
   assert.equal(context.chat.messages.nextCursor, null);
+});
+
+function requestBody(request) {
+  return new Promise((resolve) => {
+    let body = '';
+    request.on('data', (chunk) => (body += chunk));
+    request.on('end', () => resolve(JSON.parse(body)));
+  });
+}
+
+test('ordinary sends merge HTTP and WS by server ID in either order and preserve newer previews', async (t) => {
+  const { runtime, routes, sockets } = await fixture(t);
+  const context = await signIn(runtime);
+  await until(
+    () => sockets.length === 1 && !context.chat.conversations.loading,
+  );
+  context.chat.conversationCreated(conversation);
+  const other = { ...conversation, id: '888888888888888888888888' };
+  context.chat.conversationCreated(other);
+  const path = `/api/conversations/${conversation.id}/messages`;
+  routes.set(path, (response, request) => {
+    if (request.method === 'GET')
+      return json(response, { items: [], nextCursor: null });
+  });
+  context.chat.messages.open(conversation.id);
+  await until(() => !context.chat.messages.loading);
+  const bodies = [];
+  const saved = { ...message, senderId: user.id };
+  const received = deferred();
+  const ready = deferred();
+  routes.set(path, async (response, request) => {
+    bodies.push(await requestBody(request));
+    sockets[0].emit('message:created', saved);
+    received.resolve();
+    await ready.promise;
+    json(response, saved, 201);
+  });
+  const first = context.chat.sendMessage(conversation.id, '  Hello  ');
+  await received.promise;
+  await until(() => context.chat.messages.items.length === 1);
+  assert.deepEqual(context.chat.messages.items, [saved]);
+  ready.resolve();
+  await first;
+  assert.deepEqual(bodies, [{ text: 'Hello' }]);
+  assert.deepEqual(context.chat.messages.items, [saved]);
+  assert.equal(context.chat.conversations.items[0].lastMessage.id, saved.id);
+
+  const second = {
+    ...saved,
+    id: '555555555555555555555555',
+    createdAt: '2026-10-15T10:02:00.000Z',
+  };
+  routes.set(path, async (response, request) => {
+    bodies.push(await requestBody(request));
+    json(response, second, 201);
+  });
+  await context.chat.sendMessage(conversation.id, 'Hello');
+  sockets[0].emit('message:created', second);
+  sockets[0].emit('message:created', saved);
+  const otherMessage = {
+    ...message,
+    conversationId: other.id,
+    id: '999999999999999999999999',
+    createdAt: '2026-10-15T11:00:00.000Z',
+  };
+  sockets[0].emit('message:created', otherMessage);
+  await until(() => context.chat.conversations.items[0].id === other.id);
+  assert.deepEqual(context.chat.messages.items, [saved, second]);
+  assert.deepEqual(bodies, [{ text: 'Hello' }, { text: 'Hello' }]);
+  assert.equal(context.chat.conversations.items[1].lastMessage.id, second.id);
+});
+
+test('a lost send response remains an error even when WS delivers it and a new send can create another message', async (t) => {
+  const { runtime, routes, sockets } = await fixture(t);
+  const context = await signIn(runtime);
+  await until(
+    () => sockets.length === 1 && !context.chat.conversations.loading,
+  );
+  context.chat.conversationCreated(conversation);
+  const path = `/api/conversations/${conversation.id}/messages`;
+  const bodies = [];
+  const first = { ...message, senderId: user.id };
+  const second = { ...first, id: '555555555555555555555555' };
+  routes.set(path, async (response, request) => {
+    if (request.method === 'GET')
+      return json(response, { items: [], nextCursor: null });
+    bodies.push(await requestBody(request));
+    sockets[0].emit('message:created', bodies.length === 1 ? first : second);
+    if (bodies.length === 1) return response.destroy();
+    json(response, second, 201);
+  });
+  context.chat.messages.open(conversation.id);
+  await until(() => !context.chat.messages.loading);
+  await assert.rejects(context.chat.sendMessage(conversation.id, 'Hello'));
+  await until(() => context.chat.messages.items.length === 1);
+  await delay(50);
+  assert.equal(bodies.length, 1);
+  await context.chat.sendMessage(conversation.id, 'Hello');
+  assert.deepEqual(context.chat.messages.items, [first, second]);
+  assert.deepEqual(bodies, [{ text: 'Hello' }, { text: 'Hello' }]);
+});
+
+test('an unknown conversation event synchronizes through the controller and survives a stale in-flight list', async (t) => {
+  const { runtime, routes, sockets } = await fixture(t);
+  const started = deferred();
+  const ready = deferred();
+  routes.set('/api/conversations', async (response) => {
+    started.resolve();
+    await ready.promise;
+    json(response, { items: [conversation], nextCursor: null });
+  });
+  const context = await signIn(runtime);
+  await started.promise;
+  await until(() => sockets.length === 1);
+  sockets[0].emit('message:created', message);
+  // Ordered socket events provide a barrier before releasing the older response.
+  const other = { ...conversation, id: '888888888888888888888888' };
+  sockets[0].emit('conversation:created', other);
+  await until(() =>
+    context.chat.conversations.items.some((item) => item.id === other.id),
+  );
+  ready.resolve();
+  await until(
+    () => context.chat.conversations.items[0]?.lastMessage?.id === message.id,
+  );
+  assert.deepEqual(context.chat.messages.items, []);
+});
+
+test('a late send updates its own preview after switching history and cannot change a new login', async (t) => {
+  const { runtime, routes, sockets } = await fixture(t);
+  const context = await signIn(runtime);
+  await until(
+    () => sockets.length === 1 && !context.chat.conversations.loading,
+  );
+  context.chat.conversationCreated(conversation);
+  const other = { ...conversation, id: '888888888888888888888888' };
+  context.chat.conversationCreated(other);
+  const started = deferred();
+  const ready = deferred();
+  const path = `/api/conversations/${conversation.id}/messages`;
+  routes.set(path, async (response, request) => {
+    if (request.method === 'GET')
+      return json(response, { items: [], nextCursor: null });
+    await requestBody(request);
+    started.resolve();
+    await ready.promise;
+    json(response, message, 201);
+  });
+  context.chat.messages.open(conversation.id);
+  const send = context.chat.sendMessage(conversation.id, 'Hello');
+  await started.promise;
+  context.chat.messages.open(other.id);
+  ready.resolve();
+  await send;
+  assert.deepEqual(context.chat.messages.items, []);
+  assert.equal(context.chat.conversations.items[0].lastMessage.id, message.id);
+
+  const lateStarted = deferred();
+  const lateReady = deferred();
+  routes.set(path, async (response, request) => {
+    await requestBody(request);
+    lateStarted.resolve();
+    await lateReady.promise;
+    json(response, message, 201);
+  });
+  const lateSend = context.chat.sendMessage(conversation.id, 'Hello');
+  const rejection = assert.rejects(lateSend, /chat has ended/);
+  await lateStarted.promise;
+  await runtime.session.logout();
+  const current = await signIn(runtime);
+  lateReady.resolve();
+  await rejection;
+  assert.deepEqual(current.chat.messages.items, []);
+  assert.deepEqual(current.chat.conversations.items, []);
+  assert.deepEqual(context.chat.conversations.items, []);
+  await assert.rejects(context.chat.sendMessage(conversation.id, 'Hello'));
 });

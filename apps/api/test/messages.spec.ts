@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import { Test } from '@nestjs/testing';
+import { mongo } from 'mongoose';
 import type { INestApplication } from '@nestjs/common';
 import { GenericContainer, type StartedTestContainer } from 'testcontainers';
 import request from 'supertest';
@@ -12,37 +13,58 @@ import { setup } from '../src/setup';
 describe('Messages HTTP / Socket.io boundaries', () => {
   let container: StartedTestContainer;
   let app: INestApplication;
+  let database: mongo.MongoClient;
   let url: string;
+  let startApp: () => Promise<void>;
   const sockets: Socket[] = [];
   let now = new Date('2026-10-15T12:00:00Z');
   beforeAll(async () => {
     container = await new GenericContainer('mongo:8')
       .withExposedPorts(27017)
       .start();
-    const module = await Test.createTestingModule({
-      imports: [
-        AppModule.configure({
-          MONGODB_URI: `mongodb://${container.getHost()}:${container.getMappedPort(27017)}/conversations`,
-          JWT_SECRET: 'conversation-test-secret-at-least-thirty-two',
-          COOKIE_SECURE: 'false',
-          PORT: 3001,
-        }),
-      ],
-    })
-      .overrideProvider(Clock)
-      .useValue({
-        now: () => now,
-        scheduleAt: () => () => {},
+    const mongoUri = `mongodb://${container.getHost()}:${container.getMappedPort(27017)}/conversations`;
+    database = await new mongo.MongoClient(mongoUri).connect();
+    const messages = database.db().collection('messages');
+    await messages.createIndex(
+      { conversationId: 1, senderId: 1, attemptId: 1 },
+      { unique: true },
+    );
+    await messages.insertOne({
+      _id: new mongo.ObjectId('000000000000000000000001'),
+      conversationId: '000000000000000000000002',
+      senderId: '000000000000000000000003',
+      text: 'Legacy message',
+      attemptId: 'legacy-attempt',
+      createdAt: now,
+    });
+    startApp = async () => {
+      const module = await Test.createTestingModule({
+        imports: [
+          AppModule.configure({
+            MONGODB_URI: mongoUri,
+            JWT_SECRET: 'conversation-test-secret-at-least-thirty-two',
+            COOKIE_SECURE: 'false',
+            PORT: 3001,
+          }),
+        ],
       })
-      .compile();
-    app = module.createNestApplication();
-    setup(app);
-    await app.listen(0, '127.0.0.1');
-    url = await app.getUrl();
+        .overrideProvider(Clock)
+        .useValue({
+          now: () => now,
+          scheduleAt: () => () => {},
+        })
+        .compile();
+      app = module.createNestApplication();
+      setup(app);
+      await app.listen(0, '127.0.0.1');
+      url = await app.getUrl();
+    };
+    await startApp();
   });
   afterAll(async () => {
     sockets.forEach((s) => s.disconnect());
     await app?.close();
+    await database?.close();
     await container?.stop();
   });
   async function register(username: string) {
@@ -59,6 +81,55 @@ describe('Messages HTTP / Socket.io boundaries', () => {
       cookie: response.headers['set-cookie'][0] as string,
     };
   }
+  it('removes the existing attempt index without losing legacy history or its public preview', async () => {
+    const messages = database.db().collection('messages');
+    const indexes = await messages.indexes();
+    expect(indexes.map((index) => index.name)).not.toContain(
+      'conversationId_1_senderId_1_attemptId_1',
+    );
+    expect(indexes.map((index) => index.name)).toContain(
+      'conversationId_1_createdAt_-1__id_-1',
+    );
+    const alice = await register('LegacyAlice');
+    const bob = await register('LegacyBob');
+    const conversation = await request(app.getHttpServer())
+      .post('/api/conversations')
+      .set('Cookie', alice.cookie)
+      .send({ userId: bob.id })
+      .expect(201);
+    await messages.updateOne(
+      { _id: new mongo.ObjectId('000000000000000000000001') },
+      { $set: { conversationId: conversation.body.id, senderId: alice.id } },
+    );
+    const history = await request(app.getHttpServer())
+      .get(`/api/conversations/${conversation.body.id}/messages`)
+      .set('Cookie', bob.cookie)
+      .expect(200);
+    expect(history.body.items).toEqual([
+      {
+        id: '000000000000000000000001',
+        conversationId: conversation.body.id,
+        senderId: alice.id,
+        text: 'Legacy message',
+        createdAt: now.toISOString(),
+      },
+    ]);
+    const list = await request(app.getHttpServer())
+      .get('/api/conversations')
+      .set('Cookie', bob.cookie)
+      .expect(200);
+    expect(list.body.items[0].lastMessage).toEqual(history.body.items[0]);
+    expect(await messages.countDocuments({ attemptId: 'legacy-attempt' })).toBe(
+      1,
+    );
+    await app.close();
+    await startApp();
+    const restored = await request(app.getHttpServer())
+      .get(`/api/conversations/${conversation.body.id}/messages`)
+      .set('Cookie', bob.cookie)
+      .expect(200);
+    expect(restored.body).toEqual(history.body);
+  });
   it('persists trimmed text and internal line breaks in participant history', async () => {
     const alice = await register('MessageAlice');
     const bob = await register('MessageBob');
@@ -70,14 +141,13 @@ describe('Messages HTTP / Socket.io boundaries', () => {
     const sent = await request(app.getHttpServer())
       .post(`/api/conversations/${conversation.body.id}/messages`)
       .set('Cookie', alice.cookie)
-      .send({ text: '  Hello\nworld  ', attemptId: 'attempt-1' })
+      .send({ text: '  Hello\nworld  ' })
       .expect(201);
     expect(messageSchema.parse(sent.body)).toEqual({
       id: expect.any(String),
       conversationId: conversation.body.id,
       senderId: alice.id,
       text: 'Hello\nworld',
-      attemptId: 'attempt-1',
       createdAt: '2026-10-15T12:00:00.000Z',
     });
     const history = await request(app.getHttpServer())
@@ -89,32 +159,28 @@ describe('Messages HTTP / Socket.io boundaries', () => {
       nextCursor: null,
     });
   });
-  it('validates text, protects history and sends, and deduplicates concurrent attempts with conflict detection', async () => {
-    const alice = await register('RetryAlice');
-    const bob = await register('RetryBob');
-    const outsider = await register('RetryOther');
+  it('validates text and participant access and saves every ordinary concurrent send', async () => {
+    const alice = await register('SendAlice');
+    const bob = await register('SendBob');
+    const outsider = await register('SendOther');
     const conversation = await request(app.getHttpServer())
       .post('/api/conversations')
       .set('Cookie', alice.cookie)
       .send({ userId: bob.id })
       .expect(201);
     const path = `/api/conversations/${conversation.body.id}/messages`;
-    const send = (
-      text: string,
-      cookie = alice.cookie,
-      attemptId = 'same-attempt',
-    ) =>
+    const send = (text: string, cookie = alice.cookie) =>
       request(app.getHttpServer())
         .post(path)
         .set('Cookie', cookie)
-        .send({ text, attemptId });
+        .send({ text });
     for (const text of ['', '   \n ', 'x'.repeat(2001)])
       await send(text).expect(400);
-    await send('x'.repeat(2000), alice.cookie, 'maximum').expect(201);
+    await send('x'.repeat(2000)).expect(201);
     await request(app.getHttpServer())
       .post(path)
       .set('Cookie', alice.cookie)
-      .send({ text: 'Hello' })
+      .send({})
       .expect(400);
     await send('Hello', outsider.cookie).expect(404);
     await request(app.getHttpServer())
@@ -130,27 +196,39 @@ describe('Messages HTTP / Socket.io boundaries', () => {
     await request(app.getHttpServer()).get(path).expect(401);
     await request(app.getHttpServer())
       .post(path)
-      .send({ text: 'Hello', attemptId: 'same-attempt' })
+      .send({ text: 'Hello' })
       .expect(401);
-    const attempts = await Promise.all(
+    const sends = await Promise.all(
       Array.from({ length: 8 }, () => send('  Hello  ').expect(201)),
     );
-    expect(new Set(attempts.map((result) => result.body.id)).size).toBe(1);
-    expect((await send('Hello').expect(201)).body).toEqual(attempts[0].body);
-    expect((await send('Changed').expect(409)).body).toEqual({
-      code: 'MESSAGE_ATTEMPT_CONFLICT',
-      message: 'This attempt was already used for different text',
-    });
-    await send('Hello', alice.cookie, 'new-attempt').expect(201);
+    expect(new Set(sends.map((result) => result.body.id)).size).toBe(8);
+    expect(sends.every((result) => result.body.text === 'Hello')).toBe(true);
+    const repeated = await send('Hello').expect(201);
+    expect(sends.some((result) => result.body.id === repeated.body.id)).toBe(
+      false,
+    );
+    await send('Changed').expect(201);
     await send('Hello', bob.cookie).expect(201);
+    const stored = await database
+      .db()
+      .collection('messages')
+      .find({
+        conversationId: conversation.body.id,
+      })
+      .toArray();
+    expect(stored).toHaveLength(12);
+    expect(stored.every((row) => !('attemptId' in row))).toBe(true);
     const history = await request(app.getHttpServer())
       .get(path)
       .set('Cookie', alice.cookie)
       .expect(200);
-    expect(history.body.items).toHaveLength(4);
+    expect(history.body.items).toHaveLength(12);
+    expect(
+      history.body.items.every((row: object) => !('attemptId' in row)),
+    ).toBe(true);
     const login = await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ email: 'RetryAlice@example.com', password: '12345678' })
+      .send({ email: 'SendAlice@example.com', password: '12345678' })
       .expect(200);
     expect(
       (
@@ -199,7 +277,7 @@ describe('Messages HTTP / Socket.io boundaries', () => {
     const sent = await request(app.getHttpServer())
       .post(`/api/conversations/${conversation.body.id}/messages`)
       .set('Cookie', alice.cookie)
-      .send({ text: 'Saved before delivery', attemptId: 'socket-attempt' })
+      .send({ text: 'Saved before delivery' })
       .expect(201);
     await Promise.race([
       Promise.all(notifications),
@@ -249,7 +327,7 @@ describe('Messages HTTP / Socket.io boundaries', () => {
           await request(app.getHttpServer())
             .post(path)
             .set('Cookie', alice.cookie)
-            .send({ text: `Line ${index}`, attemptId: `history-${index}` })
+            .send({ text: `Line ${index}` })
             .expect(201)
         ).body,
       );
@@ -280,7 +358,7 @@ describe('Messages HTTP / Socket.io boundaries', () => {
         .set('Cookie', cookie)
         .expect(400);
   });
-  it('recovers every missed page after reconnect and safely retries an unacknowledged send', async () => {
+  it('makes older messages pageable after reconnect and saves a repeated text separately', async () => {
     const alice = await register('RecoveryAlice');
     const bob = await register('RecoveryBob');
     const conversation = (
@@ -295,7 +373,7 @@ describe('Messages HTTP / Socket.io boundaries', () => {
       request(app.getHttpServer())
         .post(path)
         .set('Cookie', alice.cookie)
-        .send({ text: `Missed ${index}`, attemptId: `missed-${index}` })
+        .send({ text: `Missed ${index}` })
         .expect(201);
     const anchor = (await send(0)).body;
     const socket = io(url, {
@@ -352,7 +430,9 @@ describe('Messages HTTP / Socket.io boundaries', () => {
       .query({ cursor: first.nextCursor })
       .set('Cookie', alice.cookie)
       .expect(400);
-    expect((await send(105)).body).toEqual(missed[104]);
+    const repeated = (await send(105)).body;
+    expect(repeated.id).not.toBe(missed[104].id);
+    expect(repeated.text).toBe(missed[104].text);
     const notification = new Promise((resolve) =>
       socket.once('message:created', resolve),
     );
@@ -377,7 +457,7 @@ describe('Messages HTTP / Socket.io boundaries', () => {
       await request(app.getHttpServer())
         .post(`/api/conversations/${first.id}/messages`)
         .set('Cookie', bob.cookie)
-        .send({ text: 'Latest activity', attemptId: 'activity' })
+        .send({ text: 'Latest activity' })
         .expect(201)
     ).body;
     const list = await request(app.getHttpServer())
@@ -410,25 +490,21 @@ describe('Messages HTTP / Socket.io boundaries', () => {
           ).body,
       ),
     );
-    const send = (id: string, text: string, attemptId: string) =>
+    const send = (id: string, text: string) =>
       request(app.getHttpServer())
         .post(`/api/conversations/${id}/messages`)
         .set('Cookie', viewer.cookie)
-        .send({ text, attemptId })
+        .send({ text })
         .expect(201);
     now = new Date('2026-10-15T12:02:00Z');
     await Promise.all(
-      conversations.map((conversation) =>
-        send(conversation.id, 'Active', 'page-activity'),
-      ),
+      conversations.map((conversation) => send(conversation.id, 'Active')),
     );
     const sorted = conversations
       .map((conversation) => conversation.id as string)
       .sort()
       .reverse();
-    const last = (
-      await send(sorted[0], 'Second at the same time', 'page-second')
-    ).body;
+    const last = (await send(sorted[0], 'Second at the same time')).body;
     const first = await request(app.getHttpServer())
       .get('/api/conversations')
       .set('Cookie', viewer.cookie)
