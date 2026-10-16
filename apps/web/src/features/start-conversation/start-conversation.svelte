@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
   import { Alert, Button } from 'flowbite-svelte';
   import { UserAvatar } from '@entities/user';
   import { Icon } from '@shared/ui';
@@ -9,12 +8,10 @@
     userId,
     username,
   }: {
-    onStart: (userId: string, signal: AbortSignal) => Promise<void>;
+    onStart: (userId: string) => Promise<void>;
     userId: string;
     username: string;
   } = $props();
-  const lifecycle = new AbortController();
-  onDestroy(() => lifecycle.abort());
   let loading = $state(false);
   let error = $state('');
 
@@ -23,13 +20,12 @@
     loading = true;
     error = '';
     try {
-      await onStart(userId, lifecycle.signal);
+      await onStart(userId);
     } catch (reason) {
-      if (!lifecycle.signal.aborted)
-        error =
-          reason instanceof ApiError
-            ? reason.message
-            : 'Unable to start conversation. Please try again';
+      error =
+        reason instanceof ApiError
+          ? reason.message
+          : 'Unable to start conversation. Please try again';
     } finally {
       loading = false;
     }

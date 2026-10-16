@@ -34,10 +34,7 @@
     onLoadMessages: (more?: boolean) => Promise<void>;
     onLoadConversations: (more?: boolean) => Promise<void>;
     onSearch: (search: string, cursor?: string) => Promise<UsersPage>;
-    onStart: (
-      userId: string,
-      signal?: AbortSignal,
-    ) => Promise<Conversation | null>;
+    onStart: (userId: string) => Promise<Conversation | null>;
     onLogout: () => Promise<void>;
     connectionState: string;
   } = $props();
@@ -66,9 +63,9 @@
     view = 'chat';
   }
 
-  async function start(userId: string, signal: AbortSignal) {
-    const conversation = await onStart(userId, signal);
-    if (!conversation || signal.aborted) return;
+  async function start(userId: string) {
+    const conversation = await onStart(userId);
+    if (!conversation) return;
     selectedConversation = conversation;
     view = 'chat';
   }

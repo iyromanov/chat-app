@@ -412,50 +412,6 @@ test('failed starts preserve the selected history and late starts cannot enter a
   );
 });
 
-test('removing a search result cancels its pending conversation selection', async (t) => {
-  const { app, routes, sockets, requests } = await fixture(t);
-  const context = await signIn(app);
-  await until(
-    () => sockets.length === 1 && !context.chat.conversations.loading,
-  );
-  const other = { ...conversation, id: '888888888888888888888888' };
-  const path = `/api/conversations/${other.id}/messages`;
-  routes.set(path, (response) =>
-    json(response, { items: [], nextCursor: null }),
-  );
-  await context.chat.openConversation(other.id);
-  const started = deferred();
-  const ready = deferred();
-  routes.set('/api/conversations', async (response, request) => {
-    if (request.method === 'GET')
-      return json(response, { items: [], nextCursor: null });
-    started.resolve();
-    await ready.promise;
-    json(response, conversation, 201);
-  });
-  const lifecycle = new AbortController();
-  const pending = context.chat.startConversation(
-    conversation.counterpart.id,
-    lifecycle.signal,
-  );
-  await started.promise;
-  lifecycle.abort();
-  ready.resolve();
-  assert.equal(await pending, null);
-  assert.equal(context.chat.messages.conversationId, other.id);
-  assert.equal(
-    requests.includes(`/api/conversations/${conversation.id}/messages`),
-    false,
-  );
-  assert.equal(
-    await context.chat.startConversation(
-      conversation.counterpart.id,
-      lifecycle.signal,
-    ),
-    null,
-  );
-});
-
 test('an empty conversation survives a stale list refresh and can exchange messages after starting', async (t) => {
   const { app, routes, sockets } = await fixture(t);
   const context = await signIn(app);

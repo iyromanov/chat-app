@@ -46,7 +46,9 @@ export function createApplication(
       new ConversationsStore(),
       new MessagesStore(),
     );
+
     let connectionState = $state('Connecting…');
+
     const realtimeClient = createRealtimeClient(options.baseUrl, {
       connected: () => {
         connectionState = 'Connected';
@@ -65,6 +67,7 @@ export function createApplication(
       conversationCreated: chat.conversationCreated,
       messageCreated: chat.messageCreated,
     });
+
     context = {
       api,
       chat,
@@ -76,6 +79,7 @@ export function createApplication(
         chat.dispose();
       },
     };
+
     chat.refresh();
     realtimeClient.connect();
   }
