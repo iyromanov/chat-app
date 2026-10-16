@@ -33,7 +33,7 @@
     onLoadMessages: (more?: boolean) => Promise<void>;
     onLoadConversations: (more?: boolean) => Promise<void>;
     onSearch: (search: string, cursor?: string) => Promise<UsersPage>;
-    onStart: (userId: string) => Promise<Conversation | null>;
+    onStart: (userId: string) => Promise<Conversation>;
     onLogout: () => Promise<void>;
     connectionState: string;
   } = $props();
@@ -58,7 +58,6 @@
 
   async function start(userId: string) {
     const conversation = await onStart(userId);
-    if (!conversation) return;
     selectedConversation = conversation;
     view = 'chat';
   }

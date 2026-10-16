@@ -16,15 +16,6 @@ export class MessagesRepository implements OnModuleInit {
   ) {}
   async onModuleInit(): Promise<void> {
     await this.messages.init();
-    // Existing documents remain readable; only the obsolete constraint is removed.
-    try {
-      await this.messages.collection.dropIndex(
-        'conversationId_1_senderId_1_attemptId_1',
-      );
-    } catch (error) {
-      if (!(error instanceof Error && 'code' in error && error.code === 27))
-        throw error;
-    }
   }
   async create(
     conversationId: string,

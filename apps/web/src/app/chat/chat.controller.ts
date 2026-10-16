@@ -18,7 +18,6 @@ import { loadCursorPage } from '@shared/lib';
 
 export class ChatController {
   private disposed = false;
-  private selectionGeneration = 0;
   private messageEvents = new Set<string>();
   private conversationEvents = new Set<string>();
   private unknownMessages = new Map<string, Message>();
@@ -43,27 +42,18 @@ export class ChatController {
     return data;
   };
 
-  startConversation = async (userId: string): Promise<Conversation | null> => {
+  startConversation = async (userId: string): Promise<Conversation> => {
     if (this.disposed) throw new Error('This chat has ended');
-    const generation = ++this.selectionGeneration;
-    try {
-      const { data } = await this.api.conversations.start({ userId });
-      if (this.disposed) throw new Error('This chat has ended');
-      if (generation !== this.selectionGeneration) return null;
-      if (!data) throw new Error('Missing conversation');
-      this.conversationCreated(data);
-      this.openConversation(data.id);
-      return data;
-    } catch (error) {
-      if (!this.disposed && generation !== this.selectionGeneration)
-        return null;
-      throw error;
-    }
+    const { data } = await this.api.conversations.start({ userId });
+    if (this.disposed) throw new Error('This chat has ended');
+    if (!data) throw new Error('Missing conversation');
+    this.conversationCreated(data);
+    this.openConversation(data.id);
+    return data;
   };
 
   openConversation = async (conversationId: string): Promise<void> => {
     if (this.disposed) return;
-    this.selectionGeneration++;
     if (this.messages.conversationId === conversationId) return;
     this.messageEvents.clear();
     this.messagesStore.select(conversationId);

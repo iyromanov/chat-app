@@ -16,7 +16,6 @@ type AuthenticatedContext = {
 export function createApplication(
   options: { baseUrl?: string; fetch?: typeof fetch } = {},
 ) {
-  let generation = 0;
   let disposed = false;
   let started: Promise<void> | undefined;
   let context = $state.raw<AuthenticatedContext | null>(null);
@@ -25,19 +24,17 @@ export function createApplication(
   const session = new SessionController(auth, publicApi.auth, userChanged);
 
   function userChanged(user: CurrentUser | null) {
-    generation++;
     const previous = context;
     context = null;
     previous?.dispose();
     if (disposed) return;
     if (!user) return;
 
-    const contextGeneration = generation;
-    const isCurrent = () => !disposed && contextGeneration === generation;
+    let contextDisposed = false;
     const api = createApi({
       ...options,
       onUnauthorized: () => {
-        if (isCurrent()) session.end();
+        if (!contextDisposed) session.end();
       },
     });
 
@@ -59,10 +56,10 @@ export function createApplication(
       },
       connectionFailed: () => {
         connectionState = 'Disconnected — reconnecting…';
-        if (isCurrent()) session.revalidate();
+        if (!contextDisposed) session.revalidate();
       },
       authEnded: () => {
-        if (isCurrent()) session.end();
+        if (!contextDisposed) session.end();
       },
       conversationCreated: chat.conversationCreated,
       messageCreated: chat.messageCreated,
@@ -75,6 +72,7 @@ export function createApplication(
         return connectionState;
       },
       dispose() {
+        contextDisposed = true;
         realtimeClient.dispose();
         chat.dispose();
       },

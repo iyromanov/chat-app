@@ -378,7 +378,7 @@ test('starting and reopening a conversation updates its list and opens saved his
   assert.deepEqual(context.chat.messages.items, [message]);
 });
 
-test('a delayed start cannot override a later conversation selection or start', async (t) => {
+test('a completed start opens its conversation and a failed start preserves the current selection', async (t) => {
   for (const phase of ['creation', 'history', 'another start', 'failure']) {
     await t.test(phase, async (t) => {
       const { app, routes, sockets } = await fixture(t);
@@ -426,6 +426,8 @@ test('a delayed start cannot override a later conversation selection or start', 
         json(response, { items: [otherMessage], nextCursor: null }),
       );
       const old = context.chat.startConversation(conversation.counterpart.id);
+      const result =
+        phase === 'failure' ? assert.rejects(old, /Service unavailable/) : old;
       await started.promise;
       if (phase === 'another start')
         assert.deepEqual(
@@ -434,10 +436,15 @@ test('a delayed start cannot override a later conversation selection or start', 
         );
       else await context.chat.openConversation(other.id);
       ready.resolve();
-      assert.deepEqual(await old, phase === 'history' ? conversation : null);
-      assert.equal(context.chat.messages.conversationId, other.id);
+      if (phase === 'failure') await result;
+      else assert.deepEqual(await result, conversation);
+      const selected =
+        phase === 'history' || phase === 'failure' ? other : conversation;
+      assert.equal(context.chat.messages.conversationId, selected.id);
       await until(() => !context.chat.messages.pagination.loading);
-      assert.deepEqual(context.chat.messages.items, [otherMessage]);
+      assert.deepEqual(context.chat.messages.items, [
+        selected === other ? otherMessage : message,
+      ]);
     });
   }
 });
@@ -654,7 +661,7 @@ test('login and registration expose failures without creating a private context'
   }
 });
 
-test('late restoration success and unauthorized responses cannot replace a newer login', async (t) => {
+test('restoration applies its result when it completes after login', async (t) => {
   for (const status of [200, 401]) {
     await t.test(String(status), async (t) => {
       const { app, routes } = await fixture(t);
@@ -677,8 +684,17 @@ test('late restoration success and unauthorized responses cannot replace a newer
       const current = await signIn(app);
       ready.resolve();
       await restoration;
-      assert.equal(app.context, current);
-      assert.deepEqual(app.auth.state.user, user);
+      assert.notEqual(app.context, current);
+      if (status === 200) {
+        assert.equal(app.auth.state.status, 'authenticated');
+        assert.deepEqual(app.auth.state.user, {
+          ...user,
+          username: 'PreviousUser',
+        });
+      } else {
+        assert.equal(app.context, null);
+        assert.equal(app.auth.state.status, 'anonymous');
+      }
     });
   }
 });
@@ -714,8 +730,8 @@ test('logout failures preserve the current context; an unauthorized response end
   assert.deepEqual(context.chat.conversations.items, []);
 });
 
-test('late logout errors and unauthorized responses cannot end a newer login', async (t) => {
-  for (const status of [401, 503]) {
+test('logout applies success, unauthorized responses and errors after another login', async (t) => {
+  for (const status of [204, 401, 503]) {
     await t.test(String(status), async (t) => {
       const { app, routes } = await fixture(t);
       await signIn(app);
@@ -728,12 +744,17 @@ test('late logout errors and unauthorized responses cannot end a newer login', a
         );
       });
       const logout = app.session.logout();
+      const result =
+        status === 503 ? assert.rejects(logout, /Service unavailable/) : logout;
       await started.promise;
       const current = await signIn(app);
       ready.resolve();
-      await logout;
-      assert.equal(app.context, current);
-      assert.equal(app.auth.state.status, 'authenticated');
+      await result;
+      assert.equal(app.context, status === 503 ? current : null);
+      assert.equal(
+        app.auth.state.status,
+        status === 503 ? 'authenticated' : 'anonymous',
+      );
     });
   }
 });
@@ -852,7 +873,7 @@ test('restoration, socket events and reconnect share chat synchronization', asyn
   );
 });
 
-test('a new login isolates late HTTP failures, logout responses and store loads', async (t) => {
+test('a new login isolates late HTTP failures and store loads from the previous context', async (t) => {
   const { app, routes, sockets } = await fixture(t);
   const conversationsStarted = deferred();
   const conversationsResponse = deferred();
@@ -877,17 +898,6 @@ test('a new login isolates late HTTP failures, logout responses and store loads'
   const rejected = assert.rejects(previous.api.auth.me());
   await meStarted.promise;
 
-  const logoutStarted = deferred();
-  const logoutResponse = deferred();
-  routes.set('/api/auth/logout', (response) => {
-    logoutStarted.resolve();
-    logoutResponse.promise.then(() => {
-      response.writeHead(204);
-      response.end();
-    });
-  });
-  const logout = app.session.logout();
-  await logoutStarted.promise;
   routes.delete('/api/conversations');
   const current = await signIn(app);
   assert.notEqual(current, previous);
@@ -897,8 +907,7 @@ test('a new login isolates late HTTP failures, logout responses and store loads'
 
   conversationsResponse.resolve();
   meResponse.resolve();
-  logoutResponse.resolve();
-  await Promise.all([rejected, logout]);
+  await rejected;
   previous.chat.applySavedMessage(message);
   previous.chat.conversationCreated(conversation);
   await until(

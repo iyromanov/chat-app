@@ -30,7 +30,6 @@
   let previousLast = '';
   let showNew = $state(false);
   let loadingOlderId: string | null = null;
-  let scrollGeneration = 0;
 
   function bottom() {
     if (scroller) scroller.scrollTop = scroller.scrollHeight;
@@ -66,7 +65,6 @@
     const last = messages.items.at(-1);
     const loading = messages.pagination.loading;
     untrack(() => {
-      const generation = ++scrollGeneration;
       if (previousConversation !== id) {
         previousConversation = id;
         previousLast = '';
@@ -79,10 +77,7 @@
         (nearBottom || (changed && last.senderId === userId));
       previousLast = last?.id ?? '';
       if (changed && !shouldScroll) showNew = true;
-      if (shouldScroll)
-        tick().then(() => {
-          if (generation === scrollGeneration && !loading) bottom();
-        });
+      if (shouldScroll && !loading) tick().then(bottom);
     });
   });
 
