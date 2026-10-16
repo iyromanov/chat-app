@@ -18,6 +18,7 @@ describe('Messages HTTP / Socket.io boundaries', () => {
   let startApp: () => Promise<void>;
   const sockets: Socket[] = [];
   let now = new Date('2026-10-15T12:00:00Z');
+
   beforeAll(async () => {
     container = await new GenericContainer('mongo:8')
       .withExposedPorts(27017)
@@ -48,12 +49,14 @@ describe('Messages HTTP / Socket.io boundaries', () => {
     };
     await startApp();
   });
+
   afterAll(async () => {
     sockets.forEach((s) => s.disconnect());
     await app?.close();
     await database?.close();
     await container?.stop();
   });
+
   async function register(username: string) {
     const response = await request(app.getHttpServer())
       .post('/api/auth/register')
@@ -68,6 +71,7 @@ describe('Messages HTTP / Socket.io boundaries', () => {
       cookie: response.headers['set-cookie'][0] as string,
     };
   }
+
   it('preserves message history and its public preview across application restarts', async () => {
     const alice = await register('RestartAlice');
     const bob = await register('RestartBob');
@@ -99,6 +103,7 @@ describe('Messages HTTP / Socket.io boundaries', () => {
       .expect(200);
     expect(restored.body).toEqual(history.body);
   });
+
   it('persists trimmed text and internal line breaks in participant history', async () => {
     const alice = await register('MessageAlice');
     const bob = await register('MessageBob');
@@ -128,6 +133,7 @@ describe('Messages HTTP / Socket.io boundaries', () => {
       nextCursor: null,
     });
   });
+
   it('validates text and participant access and saves every ordinary concurrent send', async () => {
     const alice = await register('SendAlice');
     const bob = await register('SendBob');
@@ -208,6 +214,7 @@ describe('Messages HTTP / Socket.io boundaries', () => {
       ).body,
     ).toEqual(history.body);
   });
+
   it('delivers the saved HTTP representation to every participant tab and no outsider', async () => {
     const alice = await register('SocketAlice');
     const bob = await register('SocketBob');
@@ -274,6 +281,7 @@ describe('Messages HTTP / Socket.io boundaries', () => {
     ).toEqual([sent.body]);
     tabs.forEach((tab) => tab.disconnect());
   });
+
   it('pages tied timestamps without gaps and rejects cursors for another history or viewer', async () => {
     const alice = await register('HistoryAlice');
     const bob = await register('HistoryBob');
@@ -327,6 +335,7 @@ describe('Messages HTTP / Socket.io boundaries', () => {
         .set('Cookie', cookie)
         .expect(400);
   });
+
   it('makes older messages pageable after reconnect and saves a repeated text separately', async () => {
     const alice = await register('RecoveryAlice');
     const bob = await register('RecoveryBob');
@@ -409,6 +418,7 @@ describe('Messages HTTP / Socket.io boundaries', () => {
     expect(await notification).toEqual(live);
     socket.disconnect();
   });
+
   it('derives latest message activity when listing and reopening conversations', async () => {
     const alice = await register('ActivityAlice');
     const bob = await register('ActivityBob');
@@ -440,6 +450,7 @@ describe('Messages HTTP / Socket.io boundaries', () => {
     expect(list.body.items[0].lastMessage).toEqual(message);
     expect((await start(bob.id)).body.lastMessage).toEqual(message);
   });
+
   it('paginates computed conversation activity with tied times by conversation ID and picks the latest message ID', async () => {
     const viewer = await register('ActivityPager');
     const recipients = await Promise.all(

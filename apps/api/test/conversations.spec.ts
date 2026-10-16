@@ -18,6 +18,7 @@ describe('Users and conversations HTTP / Socket.io boundaries', () => {
   let app: INestApplication;
   let url: string;
   const sockets: Socket[] = [];
+
   beforeAll(async () => {
     container = await new GenericContainer('mongo:8')
       .withExposedPorts(27017)
@@ -43,11 +44,13 @@ describe('Users and conversations HTTP / Socket.io boundaries', () => {
     await app.listen(0, '127.0.0.1');
     url = await app.getUrl();
   });
+
   afterAll(async () => {
     sockets.forEach((s) => s.disconnect());
     await app?.close();
     await container?.stop();
   });
+
   async function register(username: string) {
     const response = await request(app.getHttpServer())
       .post('/api/auth/register')
@@ -62,6 +65,7 @@ describe('Users and conversations HTTP / Socket.io boundaries', () => {
       cookie: response.headers['set-cookie'][0] as string,
     };
   }
+
   it('finds other users by case-insensitive substring without exposing emails', async () => {
     const alice = await register('Alice');
     const bob = await register('Bob');
@@ -92,6 +96,7 @@ describe('Users and conversations HTTP / Socket.io boundaries', () => {
       .expect(200, { items: [], nextCursor: null });
     await request(app.getHttpServer()).get('/api/users').expect(401);
   });
+
   it('paginates 50 users in stable username order and rejects malformed or mismatched cursors', async () => {
     const viewer = await register('Viewer');
     await Promise.all(

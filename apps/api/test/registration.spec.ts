@@ -18,6 +18,7 @@ describe('Authentication HTTP boundary (real MongoDB)', () => {
   const timers = new Map<() => void, number>();
   const sockets: Socket[] = [];
   let url: string;
+
   function advance(milliseconds: number) {
     now = new Date(now.getTime() + milliseconds);
     for (const [callback, at] of timers) {
@@ -27,6 +28,7 @@ describe('Authentication HTTP boundary (real MongoDB)', () => {
       }
     }
   }
+
   function connect(cookie?: string) {
     const socket = io(url, {
       transports: ['websocket'],
@@ -36,10 +38,13 @@ describe('Authentication HTTP boundary (real MongoDB)', () => {
     sockets.push(socket);
     return socket;
   }
+
   function event(socket: Socket, name: string): Promise<unknown> {
     return new Promise((resolve) => socket.once(name, resolve));
   }
+
   let now = new Date('2026-10-14T12:00:00Z');
+
   beforeAll(async () => {
     container = await new GenericContainer('mongo:8')
       .withExposedPorts(27017)
@@ -68,11 +73,13 @@ describe('Authentication HTTP boundary (real MongoDB)', () => {
     await app.listen(0, '127.0.0.1');
     url = await app.getUrl();
   });
+
   afterAll(async () => {
     for (const socket of sockets) socket.disconnect();
     await app?.close();
     await container?.stop();
   });
+
   const register = (body: object) =>
     request(app.getHttpServer()).post('/api/auth/register').send(body);
   const input = {
@@ -80,6 +87,7 @@ describe('Authentication HTTP boundary (real MongoDB)', () => {
     username: 'Alice_1',
     password: 'a simple password',
   };
+
   it('registers, sets a persistent HttpOnly cookie and restores the user without leaking credentials', async () => {
     const response = await register(input).expect(201);
     expect(currentUserSchema.parse(response.body)).toEqual({
@@ -109,6 +117,7 @@ describe('Authentication HTTP boundary (real MongoDB)', () => {
       .set('Cookie', cookie)
       .expect(401);
   });
+
   it.each([
     { email: '' },
     { email: 'broken' },
@@ -123,6 +132,7 @@ describe('Authentication HTTP boundary (real MongoDB)', () => {
     expect(response.body.fields).toBeDefined();
     expect(response.body.stack).toBeUndefined();
   });
+
   it.each([
     { email: 'ALICE@EXAMPLE.COM', username: 'OtherUser' },
     { email: 'another@example.com', username: 'aLiCe_1' },
@@ -130,6 +140,7 @@ describe('Authentication HTTP boundary (real MongoDB)', () => {
     const response = await register({ ...input, ...duplicate }).expect(409);
     expect(errorSchema.parse(response.body).code).toBe('USER_EXISTS');
   });
+
   it.each(['email', 'username'])(
     'allows exactly one concurrent registration sharing %s',
     async (field) => {
@@ -146,6 +157,7 @@ describe('Authentication HTTP boundary (real MongoDB)', () => {
       expect(responses.map((r) => r.status).sort()).toEqual([201, 409]);
     },
   );
+
   it('accepts boundary passwords without composition rules', async () => {
     await register({
       email: 'min@example.com',
@@ -158,6 +170,7 @@ describe('Authentication HTTP boundary (real MongoDB)', () => {
       password: 'é'.repeat(128),
     }).expect(201);
   });
+
   it('rejects missing, malformed and forged JWTs', async () => {
     const forged = new JwtService().sign(
       { sub: '507f1f77bcf86cd799439011' },
@@ -183,6 +196,7 @@ describe('Authentication HTTP boundary (real MongoDB)', () => {
       .expect(401);
     expect(errorSchema.parse(response.body).code).toBe('UNAUTHORIZED');
   });
+
   const login = (body: unknown) =>
     request(app.getHttpServer())
       .post('/api/auth/login')
