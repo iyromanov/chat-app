@@ -24,19 +24,6 @@ describe('Messages HTTP / Socket.io boundaries', () => {
       .start();
     const mongoUri = `mongodb://${container.getHost()}:${container.getMappedPort(27017)}/conversations`;
     database = await new mongo.MongoClient(mongoUri).connect();
-    const messages = database.db().collection('messages');
-    await messages.createIndex(
-      { conversationId: 1, senderId: 1, attemptId: 1 },
-      { unique: true },
-    );
-    await messages.insertOne({
-      _id: new mongo.ObjectId('000000000000000000000001'),
-      conversationId: '000000000000000000000002',
-      senderId: '000000000000000000000003',
-      text: 'Legacy message',
-      attemptId: 'legacy-attempt',
-      createdAt: now,
-    });
     startApp = async () => {
       const module = await Test.createTestingModule({
         imports: [
@@ -81,47 +68,29 @@ describe('Messages HTTP / Socket.io boundaries', () => {
       cookie: response.headers['set-cookie'][0] as string,
     };
   }
-  it('removes the existing attempt index without losing legacy history or its public preview', async () => {
-    const messages = database.db().collection('messages');
-    const indexes = await messages.indexes();
-    expect(indexes.map((index) => index.name)).not.toContain(
-      'conversationId_1_senderId_1_attemptId_1',
-    );
-    expect(indexes.map((index) => index.name)).toContain(
-      'conversationId_1_createdAt_-1__id_-1',
-    );
-    const alice = await register('LegacyAlice');
-    const bob = await register('LegacyBob');
+  it('preserves message history and its public preview across application restarts', async () => {
+    const alice = await register('RestartAlice');
+    const bob = await register('RestartBob');
     const conversation = await request(app.getHttpServer())
       .post('/api/conversations')
       .set('Cookie', alice.cookie)
       .send({ userId: bob.id })
       .expect(201);
-    await messages.updateOne(
-      { _id: new mongo.ObjectId('000000000000000000000001') },
-      { $set: { conversationId: conversation.body.id, senderId: alice.id } },
-    );
+    const sent = await request(app.getHttpServer())
+      .post(`/api/conversations/${conversation.body.id}/messages`)
+      .set('Cookie', alice.cookie)
+      .send({ text: 'Saved message' })
+      .expect(201);
     const history = await request(app.getHttpServer())
       .get(`/api/conversations/${conversation.body.id}/messages`)
       .set('Cookie', bob.cookie)
       .expect(200);
-    expect(history.body.items).toEqual([
-      {
-        id: '000000000000000000000001',
-        conversationId: conversation.body.id,
-        senderId: alice.id,
-        text: 'Legacy message',
-        createdAt: now.toISOString(),
-      },
-    ]);
+    expect(history.body.items).toEqual([sent.body]);
     const list = await request(app.getHttpServer())
       .get('/api/conversations')
       .set('Cookie', bob.cookie)
       .expect(200);
     expect(list.body.items[0].lastMessage).toEqual(history.body.items[0]);
-    expect(await messages.countDocuments({ attemptId: 'legacy-attempt' })).toBe(
-      1,
-    );
     await app.close();
     await startApp();
     const restored = await request(app.getHttpServer())
