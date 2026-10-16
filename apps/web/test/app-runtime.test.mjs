@@ -27,6 +27,9 @@ after(() => modules.close());
 const { createAppRuntime } = await modules.ssrLoadModule(
   '/src/app/runtime/runtime.svelte.ts',
 );
+const { createUserSearch } = await modules.ssrLoadModule(
+  '/src/features/find-users/user-search.svelte.ts',
+);
 const user = {
   id: '111111111111111111111111',
   username: 'Alice',
@@ -110,6 +113,390 @@ async function signIn(runtime) {
   await runtime.session.login({ email: user.email, password: 'password123' });
   return runtime.context;
 }
+
+test('local user search browses, paginates, retries failures and distinguishes empty results', async (t) => {
+  const { runtime, routes } = await fixture(t);
+  const context = await signIn(runtime);
+  const users = createUserSearch(context.chat.searchUsers);
+  t.after(users.dispose);
+  const bob = conversation.counterpart;
+  const carol = { id: '555555555555555555555555', username: 'Carol' };
+  routes.set('/api/users?search=', (response) =>
+    json(response, { items: [bob], nextCursor: 'next-users' }),
+  );
+  const first = users.load();
+  assert.equal(users.loading, true);
+  await first;
+  assert.deepEqual(users.items, [bob]);
+  assert.equal(users.nextCursor, 'next-users');
+  routes.set('/api/users?search=&cursor=next-users', (response) =>
+    json(response, { message: 'Unavailable' }, 503),
+  );
+  await users.load(true);
+  assert.equal(users.error, 'Unable to find users. Please try again');
+  assert.equal(users.loading, false);
+  assert.deepEqual(users.items, [bob]);
+  assert.equal(users.nextCursor, 'next-users');
+  routes.set('/api/users?search=&cursor=next-users', (response) =>
+    json(response, { items: [bob, carol], nextCursor: null }),
+  );
+  await users.load(true);
+  assert.equal(users.error, '');
+  assert.deepEqual(users.items, [bob, carol]);
+  assert.equal(users.nextCursor, null);
+  routes.set('/api/users?search=nobody', (response) =>
+    json(response, { items: [], nextCursor: null }),
+  );
+  users.change('nobody');
+  assert.deepEqual(users.items, []);
+  await until(() => !users.loading);
+  assert.equal(users.error, '');
+  assert.deepEqual(users.items, []);
+});
+
+test('a changed search ignores old first pages, pagination and failures', async (t) => {
+  for (const mode of ['first page', 'pagination', 'failure']) {
+    await t.test(mode, async (t) => {
+      const { runtime, routes } = await fixture(t);
+      const context = await signIn(runtime);
+      const users = createUserSearch(context.chat.searchUsers);
+      t.after(users.dispose);
+      const started = deferred();
+      const ready = deferred();
+      routes.set('/api/users?search=', (response) =>
+        json(response, {
+          items: [conversation.counterpart],
+          nextCursor: 'old-users',
+        }),
+      );
+      if (mode === 'pagination') await users.load();
+      const oldPath =
+        mode === 'pagination'
+          ? '/api/users?search=&cursor=old-users'
+          : '/api/users?search=';
+      routes.set(oldPath, async (response) => {
+        started.resolve();
+        await ready.promise;
+        json(
+          response,
+          mode === 'failure'
+            ? { message: 'Unavailable' }
+            : { items: [conversation.counterpart], nextCursor: 'stale-cursor' },
+          mode === 'failure' ? 503 : 200,
+        );
+      });
+      const old = users.load(mode === 'pagination');
+      await started.promise;
+      const carol = { id: '555555555555555555555555', username: 'Carol' };
+      routes.set('/api/users?search=cA', (response) =>
+        json(response, { items: [carol], nextCursor: null }),
+      );
+      users.change('cA');
+      assert.deepEqual(users.items, []);
+      assert.equal(users.nextCursor, null);
+      await until(() => !users.loading);
+      ready.resolve();
+      await old;
+      assert.equal(users.search, 'cA');
+      assert.deepEqual(users.items, [carol]);
+      assert.equal(users.nextCursor, null);
+      assert.equal(users.error, '');
+      assert.equal(users.loading, false);
+    });
+  }
+});
+
+test('search failures can retry the first page and disposed UI ignores pending results', async (t) => {
+  const { runtime, routes } = await fixture(t);
+  const context = await signIn(runtime);
+  const users = createUserSearch(context.chat.searchUsers);
+  routes.set('/api/users?search=', (response) => response.destroy());
+  await users.load();
+  assert.equal(users.loading, false);
+  assert.equal(users.error, 'Unable to find users. Please try again');
+  const started = deferred();
+  const ready = deferred();
+  routes.set('/api/users?search=', async (response) => {
+    started.resolve();
+    await ready.promise;
+    json(response, { items: [conversation.counterpart], nextCursor: null });
+  });
+  const retry = users.load();
+  assert.equal(users.error, '');
+  await started.promise;
+  users.dispose();
+  ready.resolve();
+  await retry;
+  assert.deepEqual(users.items, []);
+});
+
+test('search results and unauthorized responses from a previous login cannot enter a new UI', async (t) => {
+  for (const status of [200, 401]) {
+    await t.test(String(status), async (t) => {
+      const { runtime, routes } = await fixture(t);
+      const previous = await signIn(runtime);
+      const started = deferred();
+      const ready = deferred();
+      routes.set('/api/users?search=old', async (response) => {
+        started.resolve();
+        await ready.promise;
+        json(
+          response,
+          status === 200
+            ? { items: [conversation.counterpart], nextCursor: null }
+            : { message: 'Expired' },
+          status,
+        );
+      });
+      const old = previous.chat.searchUsers('old');
+      const rejected = assert.rejects(old);
+      await started.promise;
+      await runtime.session.logout();
+      const current = await signIn(runtime);
+      const users = createUserSearch(current.chat.searchUsers);
+      t.after(users.dispose);
+      await users.load();
+      ready.resolve();
+      await rejected;
+      assert.equal(runtime.context, current);
+      assert.equal(runtime.auth.state.status, 'authenticated');
+      assert.deepEqual(users.items, []);
+      assert.equal(users.error, '');
+      await assert.rejects(previous.chat.searchUsers(''), /chat has ended/);
+    });
+  }
+});
+
+test('starting and reopening a conversation updates its list and opens saved history through one action', async (t) => {
+  const { runtime, routes, sockets } = await fixture(t);
+  const context = await signIn(runtime);
+  await until(
+    () => sockets.length === 1 && !context.chat.conversations.loading,
+  );
+  const bodies = [];
+  routes.set('/api/conversations', async (response, request) => {
+    if (request.method === 'GET')
+      return json(response, { items: [], nextCursor: null });
+    bodies.push(await requestBody(request));
+    json(response, conversation, 201);
+  });
+  const path = `/api/conversations/${conversation.id}/messages`;
+  routes.set(path, (response) =>
+    json(response, { items: [message], nextCursor: null }),
+  );
+  assert.deepEqual(
+    await context.chat.startConversation(conversation.counterpart.id),
+    conversation,
+  );
+  assert.deepEqual(context.chat.conversations.items, [conversation]);
+  assert.equal(context.chat.messages.conversationId, conversation.id);
+  await until(() => !context.chat.messages.loading);
+  assert.deepEqual(context.chat.messages.items, [message]);
+  await context.chat.startConversation(conversation.counterpart.id);
+  assert.deepEqual(context.chat.conversations.items, [conversation]);
+  assert.deepEqual(bodies, [
+    { userId: conversation.counterpart.id },
+    { userId: conversation.counterpart.id },
+  ]);
+  assert.deepEqual(context.chat.messages.items, [message]);
+});
+
+test('a delayed start cannot override a later conversation selection or start', async (t) => {
+  for (const phase of ['creation', 'history', 'another start', 'failure']) {
+    await t.test(phase, async (t) => {
+      const { runtime, routes, sockets } = await fixture(t);
+      const context = await signIn(runtime);
+      await until(
+        () => sockets.length === 1 && !context.chat.conversations.loading,
+      );
+      const other = {
+        ...conversation,
+        id: '888888888888888888888888',
+        counterpart: { id: '999999999999999999999999', username: 'Carol' },
+      };
+      const otherMessage = { ...message, conversationId: other.id };
+      const started = deferred();
+      const ready = deferred();
+      routes.set('/api/conversations', async (response, request) => {
+        if (request.method === 'GET')
+          return json(response, { items: [], nextCursor: null });
+        const input = await requestBody(request);
+        if (input.userId === other.counterpart.id)
+          return json(response, other, 201);
+        if (phase !== 'history') {
+          started.resolve();
+          await ready.promise;
+        }
+        json(
+          response,
+          phase === 'failure' ? { message: 'Unavailable' } : conversation,
+          phase === 'failure' ? 503 : 201,
+        );
+      });
+      routes.set(
+        `/api/conversations/${conversation.id}/messages`,
+        async (response) => {
+          if (phase === 'history') {
+            started.resolve();
+            await ready.promise;
+          }
+          json(response, { items: [message], nextCursor: null });
+        },
+      );
+      routes.set(`/api/conversations/${other.id}/messages`, (response) =>
+        json(response, { items: [otherMessage], nextCursor: null }),
+      );
+      const old = context.chat.startConversation(conversation.counterpart.id);
+      await started.promise;
+      if (phase === 'another start')
+        assert.deepEqual(
+          await context.chat.startConversation(other.counterpart.id),
+          other,
+        );
+      else await context.chat.openConversation(other.id);
+      ready.resolve();
+      assert.deepEqual(await old, phase === 'history' ? conversation : null);
+      assert.equal(context.chat.messages.conversationId, other.id);
+      await until(() => !context.chat.messages.loading);
+      assert.deepEqual(context.chat.messages.items, [otherMessage]);
+    });
+  }
+});
+
+test('failed starts preserve the selected history and late starts cannot enter a new login', async (t) => {
+  const { runtime, routes, sockets } = await fixture(t);
+  const previous = await signIn(runtime);
+  await until(
+    () => sockets.length === 1 && !previous.chat.conversations.loading,
+  );
+  const path = `/api/conversations/${conversation.id}/messages`;
+  routes.set(path, (response) =>
+    json(response, { items: [message], nextCursor: null }),
+  );
+  await previous.chat.openConversation(conversation.id);
+  routes.set('/api/conversations', (response, request) => {
+    if (request.method === 'GET')
+      return json(response, { items: [], nextCursor: null });
+    json(response, { code: 'NOT_FOUND', message: 'User not found' }, 404);
+  });
+  await assert.rejects(
+    previous.chat.startConversation('missing'),
+    /User not found/,
+  );
+  assert.equal(previous.chat.messages.conversationId, conversation.id);
+  assert.deepEqual(previous.chat.messages.items, [message]);
+
+  const started = deferred();
+  const ready = deferred();
+  routes.set('/api/conversations', async (response, request) => {
+    if (request.method === 'GET')
+      return json(response, { items: [], nextCursor: null });
+    started.resolve();
+    await ready.promise;
+    json(response, conversation, 201);
+  });
+  const late = previous.chat.startConversation(conversation.counterpart.id);
+  const rejected = assert.rejects(late, /chat has ended/);
+  await started.promise;
+  await runtime.session.logout();
+  const current = await signIn(runtime);
+  ready.resolve();
+  await rejected;
+  assert.equal(runtime.context, current);
+  assert.deepEqual(current.chat.conversations.items, []);
+  assert.equal(current.chat.messages.conversationId, null);
+  assert.deepEqual(previous.chat.conversations.items, []);
+  await assert.rejects(
+    previous.chat.startConversation(conversation.counterpart.id),
+    /chat has ended/,
+  );
+});
+
+test('removing a search result cancels its pending conversation selection', async (t) => {
+  const { runtime, routes, sockets, requests } = await fixture(t);
+  const context = await signIn(runtime);
+  await until(
+    () => sockets.length === 1 && !context.chat.conversations.loading,
+  );
+  const other = { ...conversation, id: '888888888888888888888888' };
+  const path = `/api/conversations/${other.id}/messages`;
+  routes.set(path, (response) =>
+    json(response, { items: [], nextCursor: null }),
+  );
+  await context.chat.openConversation(other.id);
+  const started = deferred();
+  const ready = deferred();
+  routes.set('/api/conversations', async (response, request) => {
+    if (request.method === 'GET')
+      return json(response, { items: [], nextCursor: null });
+    started.resolve();
+    await ready.promise;
+    json(response, conversation, 201);
+  });
+  const lifecycle = new AbortController();
+  const pending = context.chat.startConversation(
+    conversation.counterpart.id,
+    lifecycle.signal,
+  );
+  await started.promise;
+  lifecycle.abort();
+  ready.resolve();
+  assert.equal(await pending, null);
+  assert.equal(context.chat.messages.conversationId, other.id);
+  assert.equal(
+    requests.includes(`/api/conversations/${conversation.id}/messages`),
+    false,
+  );
+  assert.equal(
+    await context.chat.startConversation(
+      conversation.counterpart.id,
+      lifecycle.signal,
+    ),
+    null,
+  );
+});
+
+test('an empty conversation survives a stale list refresh and can exchange messages after starting', async (t) => {
+  const { runtime, routes, sockets } = await fixture(t);
+  const context = await signIn(runtime);
+  await until(
+    () => sockets.length === 1 && !context.chat.conversations.loading,
+  );
+  const listStarted = deferred();
+  const listReady = deferred();
+  routes.set('/api/conversations', async (response, request) => {
+    if (request.method === 'POST') {
+      await requestBody(request);
+      sockets[0].emit('conversation:created', conversation);
+      return json(response, conversation, 201);
+    }
+    listStarted.resolve();
+    await listReady.promise;
+    json(response, { items: [], nextCursor: null });
+  });
+  const refresh = context.chat.loadConversations();
+  await listStarted.promise;
+  const sent = { ...message, senderId: user.id };
+  const reply = { ...message, id: '555555555555555555555555', text: 'Welcome' };
+  const path = `/api/conversations/${conversation.id}/messages`;
+  routes.set(path, async (response, request) => {
+    if (request.method === 'GET')
+      return json(response, { items: [], nextCursor: null });
+    assert.deepEqual(await requestBody(request), { text: 'Hello' });
+    sockets[0].emit('message:created', sent);
+    json(response, sent, 201);
+  });
+  await context.chat.startConversation(conversation.counterpart.id);
+  assert.deepEqual(context.chat.messages.items, []);
+  listReady.resolve();
+  await refresh;
+  assert.deepEqual(context.chat.conversations.items, [conversation]);
+  await context.chat.sendMessage(conversation.id, 'Hello');
+  sockets[0].emit('message:created', reply);
+  await until(() => context.chat.messages.items.length === 2);
+  assert.deepEqual(context.chat.messages.items, [sent, reply]);
+  assert.equal(context.chat.conversations.items[0].lastMessage.id, reply.id);
+});
 
 test('initial restoration distinguishes unauthorized, server and network errors and can retry', async (t) => {
   for (const failure of ['unauthorized', 'server', 'network']) {

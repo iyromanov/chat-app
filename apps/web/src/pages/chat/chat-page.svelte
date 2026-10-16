@@ -2,7 +2,7 @@
   import { onMount, tick } from 'svelte';
   import { Alert, Button, Input, Spinner } from 'flowbite-svelte';
   import type { Conversation } from '@chat/contracts/conversations';
-  import type { ApiClient } from '@shared/api';
+  import type { UsersPage } from '@chat/contracts/users';
   import { Icon, InfiniteScroll } from '@shared/ui';
   import { MessageHistory } from '@widgets/message-history';
   import type { MessagesView } from '@entities/message';
@@ -14,7 +14,6 @@
   import { createUserSearch } from '@features/find-users';
   import { StartConversation } from '@features/start-conversation';
   let {
-    api,
     conversations,
     messages,
     userId,
@@ -22,11 +21,11 @@
     onOpen,
     onLoadMessages,
     onLoadConversations,
-    onConversationCreated,
+    onSearch,
+    onStart,
     onLogout,
     connectionState,
   }: {
-    api: ApiClient;
     conversations: ConversationsView;
     messages: MessagesView;
     userId: string;
@@ -34,11 +33,15 @@
     onOpen: (conversationId: string) => Promise<void>;
     onLoadMessages: (more?: boolean) => Promise<void>;
     onLoadConversations: (more?: boolean) => Promise<void>;
-    onConversationCreated: (conversation: Conversation) => void;
+    onSearch: (search: string, cursor?: string) => Promise<UsersPage>;
+    onStart: (
+      userId: string,
+      signal?: AbortSignal,
+    ) => Promise<Conversation | null>;
     onLogout: () => Promise<void>;
     connectionState: string;
   } = $props();
-  const users = createUserSearch(() => api);
+  const users = createUserSearch((search, cursor) => onSearch(search, cursor));
   let selectedConversation = $state.raw<ConversationView | null>(null);
   let selectedId = $derived(selectedConversation?.id ?? null);
   let selected = $derived(
@@ -63,9 +66,11 @@
     view = 'chat';
   }
 
-  function started(conversation: Conversation) {
-    onConversationCreated(conversation);
-    select(conversation.id);
+  async function start(userId: string, signal: AbortSignal) {
+    const conversation = await onStart(userId, signal);
+    if (!conversation || signal.aborted) return;
+    selectedConversation = conversation;
+    view = 'chat';
   }
 
   function openSearch() {
@@ -276,10 +281,9 @@
       </h2>
       <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         {#each users.items as user (user.id)}<StartConversation
-            {api}
+            onStart={start}
             userId={user.id}
             username={user.username}
-            onStarted={started}
           />{/each}
         {#if users.loading}<div
             role="status"

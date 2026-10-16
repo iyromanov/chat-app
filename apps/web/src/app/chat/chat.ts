@@ -1,4 +1,7 @@
-import { conversationSchema } from '@chat/contracts/conversations';
+import {
+  conversationSchema,
+  type Conversation,
+} from '@chat/contracts/conversations';
 import {
   messageSchema,
   sendMessageSchema,
@@ -9,12 +12,14 @@ import type {
   ConversationsView,
 } from '@entities/conversation';
 import type { MessageStore, MessagesView } from '@entities/message';
+import type { UsersPage } from '@chat/contracts/users';
 import type { ApiClient } from '@shared/api';
 
 export class ChatController {
   private disposed = false;
   private messageGeneration = 0;
   private conversationGeneration = 0;
+  private selectionGeneration = 0;
   private messageEvents = new Set<string>();
   private conversationEvents = new Set<string>();
   private unknownMessages = new Map<string, Message>();
@@ -31,9 +36,44 @@ export class ChatController {
     this.messages = messagesStore;
   }
 
+  searchUsers = async (search: string, cursor?: string): Promise<UsersPage> => {
+    if (this.disposed) throw new Error('This chat has ended');
+    const { data } = await this.api.users.list({ search, cursor });
+    if (this.disposed) throw new Error('This chat has ended');
+    if (!data) throw new Error('Missing users');
+    return data;
+  };
+
+  startConversation = async (
+    userId: string,
+    signal?: AbortSignal,
+  ): Promise<Conversation | null> => {
+    if (this.disposed) throw new Error('This chat has ended');
+    if (signal?.aborted) return null;
+    const generation = ++this.selectionGeneration;
+    try {
+      const { data } = await this.api.conversations.start({ userId });
+      if (this.disposed) throw new Error('This chat has ended');
+      if (signal?.aborted || generation !== this.selectionGeneration)
+        return null;
+      if (!data) throw new Error('Missing conversation');
+      this.conversationCreated(data);
+      this.openConversation(data.id);
+      return data;
+    } catch (error) {
+      if (
+        !this.disposed &&
+        (signal?.aborted || generation !== this.selectionGeneration)
+      )
+        return null;
+      throw error;
+    }
+  };
+
   openConversation = async (conversationId: string): Promise<void> => {
-    if (this.disposed || this.messages.conversationId === conversationId)
-      return;
+    if (this.disposed) return;
+    this.selectionGeneration++;
+    if (this.messages.conversationId === conversationId) return;
     this.messageEvents.clear();
     this.messagesStore.select(conversationId);
     await this.loadMessages();

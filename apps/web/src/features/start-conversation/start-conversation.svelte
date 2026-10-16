@@ -1,25 +1,20 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
   import { Alert, Button } from 'flowbite-svelte';
-  import type { Conversation } from '@chat/contracts/conversations';
   import { UserAvatar } from '@entities/user';
   import { Icon } from '@shared/ui';
-  import { ApiError, type ApiClient } from '@shared/api';
+  import { ApiError } from '@shared/api';
   let {
-    api,
+    onStart,
     userId,
     username,
-    onStarted,
   }: {
-    api: ApiClient;
+    onStart: (userId: string, signal: AbortSignal) => Promise<void>;
     userId: string;
     username: string;
-    onStarted: (conversation: Conversation) => void;
   } = $props();
-  let active = true;
-  onDestroy(() => {
-    active = false;
-  });
+  const lifecycle = new AbortController();
+  onDestroy(() => lifecycle.abort());
   let loading = $state(false);
   let error = $state('');
 
@@ -28,10 +23,9 @@
     loading = true;
     error = '';
     try {
-      const { data } = await api.conversations.start({ userId });
-      if (data && active) onStarted(data);
+      await onStart(userId, lifecycle.signal);
     } catch (reason) {
-      if (active)
+      if (!lifecycle.signal.aborted)
         error =
           reason instanceof ApiError
             ? reason.message

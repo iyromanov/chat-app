@@ -78,13 +78,15 @@ Successful registration, login and restoration responses still include the docum
 
 ### Find users and start a conversation
 
+ChatController performs user search and conversation creation through the existing API. Search query, results, cursor, loading and error belong to each page's local UI model; changing the query or destroying the page invalidates older search responses. Starting a conversation applies its server response to the list and opens history through the same action used for chat selection. A newer selection supersedes a pending start. Removing its search result (including when search closes) cancels that start’s pending history selection and navigation. The page receives data and actions through props; it does not receive an HTTP client or coordinate domain stores. Logout retires the controller, so late search or creation responses cannot enter the next login.
+
 1. Register two users in independent browser sessions (for example Chrome and an incognito window). Keep an additional tab open for each participant, and optionally a third user in another session.
 2. Search by part of the other user's username, mixing uppercase and lowercase. Clear the search to list everyone else; search for an unknown name to see “No users found”. Other users' email addresses are never shown.
 3. Click “Start conversation”. Both participants' tabs immediately show the same conversation with the other username and “No messages”. Click again, or start from the other participant, to reopen the same conversation. The third user receives nothing.
 4. Reload or sign out and in: the empty conversation persists. Below 768 CSS pixels, chats, user search and the selected conversation occupy separate full-screen views. Back returns to the originating list or search with its position and query preserved.
 5. With more than 50 other users or conversations, scroll down to load the next page automatically. “Load more” also supports keyboard activation. Change the search during loading and confirm only results for the latest search remain.
 
-HTTP/Socket.io integration coverage runs against Testcontainers MongoDB via `pnpm test`; it covers search, 50-item pages, invalid and query-bound cursors, tied conversation timestamps, repeated/concurrent starts, participant lists, and event delivery to all participant tabs. Browser acceptance remains a separate manual check.
+HTTP/Socket.io integration coverage runs against Testcontainers MongoDB via `pnpm test`; it covers search, 50-item pages, invalid and query-bound cursors, tied conversation timestamps, repeated/concurrent starts, participant lists, and event delivery to all participant tabs. Client composition checks also cover search pagination and retries, superseded responses, disposed search UI, login isolation, start/open actions, overlapping selections, creation during list refresh and subsequent message exchange. Browser acceptance remains a separate manual check.
 
 ### Send messages and read saved history
 

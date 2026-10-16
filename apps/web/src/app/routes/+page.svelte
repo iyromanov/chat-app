@@ -46,7 +46,6 @@
   {@const context = runtime.context}
   <main>
     {#key context}<ChatPage
-        api={context.api}
         connectionState={context.connectionState}
         conversations={context.chat.conversations}
         messages={context.chat.messages}
@@ -55,7 +54,8 @@
         onOpen={context.chat.openConversation}
         onLoadMessages={context.chat.loadMessages}
         onLoadConversations={context.chat.loadConversations}
-        onConversationCreated={context.chat.conversationCreated}
+        onSearch={context.chat.searchUsers}
+        onStart={context.chat.startConversation}
         onLogout={runtime.session.logout}
       />{/key}
   </main>

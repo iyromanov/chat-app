@@ -1,5 +1,4 @@
-import type { PublicUser } from '@chat/contracts/users';
-import type { ApiClient } from '@shared/api';
+import type { PublicUser, UsersPage } from '@chat/contracts/users';
 
 class UserSearch {
   private generation = 0;
@@ -14,7 +13,12 @@ class UserSearch {
 
   error = $state('');
 
-  constructor(private readonly api: () => ApiClient) {}
+  constructor(
+    private readonly searchUsers: (
+      search: string,
+      cursor?: string,
+    ) => Promise<UsersPage>,
+  ) {}
 
   change = (search: string) => {
     this.generation++;
@@ -35,11 +39,11 @@ class UserSearch {
     this.loading = true;
     this.error = '';
     try {
-      const { data } = await this.api().users.list({
-        search: this.search,
-        cursor: more ? this.nextCursor! : undefined,
-      });
-      if (generation !== this.generation || !data) return;
+      const data = await this.searchUsers(
+        this.search,
+        more ? this.nextCursor! : undefined,
+      );
+      if (generation !== this.generation) return;
       this.items = [
         ...this.items,
         ...data.items.filter(
@@ -56,6 +60,8 @@ class UserSearch {
   };
 }
 
-export function createUserSearch(api: () => ApiClient) {
-  return new UserSearch(api);
+export function createUserSearch(
+  searchUsers: (search: string, cursor?: string) => Promise<UsersPage>,
+) {
+  return new UserSearch(searchUsers);
 }

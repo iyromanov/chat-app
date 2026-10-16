@@ -99,6 +99,8 @@ export default [
   {
     languageOptions: {
       globals: {
+        AbortController: 'readonly',
+        AbortSignal: 'readonly',
         SubmitEvent: 'readonly',
         KeyboardEvent: 'readonly',
         MouseEvent: 'readonly',
