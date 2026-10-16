@@ -1,14 +1,11 @@
 <script lang="ts">
-  import { loginSchema } from '@chat/contracts/auth';
-  import { type CurrentUser } from '@chat/contracts/users';
-  import { ApiError, readAuthDeadline, type ApiClient } from '@shared/api';
+  import { loginSchema, type Login } from '@chat/contracts/auth';
+  import { ApiError } from '@shared/api';
   import { Alert, Button, Helper, Input, Label } from 'flowbite-svelte';
   let {
-    api,
-    onLoggedIn,
+    onLogin,
   }: {
-    api: ApiClient;
-    onLoggedIn: (user: CurrentUser, expiresAt: number) => void;
+    onLogin: (input: Login) => Promise<void>;
   } = $props();
   let email = $state('');
   let password = $state('');
@@ -32,12 +29,8 @@
     }
     pending = true;
     try {
-      const response = await api.auth.login(parsed.data);
-      const { data } = response;
-      if (data) {
-        password = '';
-        onLoggedIn(data, readAuthDeadline(response));
-      }
+      await onLogin(parsed.data);
+      password = '';
     } catch (cause) {
       error =
         cause instanceof ApiError

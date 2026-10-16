@@ -1,5 +1,4 @@
 import { Api } from './generated';
-import { AUTH_EXPIRES_HEADER, authDeadlineSchema } from '@chat/contracts/auth';
 import { errorSchema } from '@chat/contracts/common';
 export class ApiError extends Error {
   constructor(
@@ -47,10 +46,3 @@ export function createApi(options: {
 }
 
 export type ApiClient = ReturnType<typeof createApi>;
-
-export function readAuthDeadline(response: Response): number {
-  const deadline = authDeadlineSchema.parse(
-    response.headers.get(AUTH_EXPIRES_HEADER),
-  );
-  return Date.parse(deadline);
-}

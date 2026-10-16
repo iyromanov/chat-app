@@ -1,15 +1,12 @@
 <script lang="ts">
   import { Button, Card, Heading, Helper, P } from 'flowbite-svelte';
   import { RegistrationForm } from '@features/register';
-  import type { ApiClient } from '@shared/api';
-  import type { CurrentUser } from '@chat/contracts/users';
+  import type { Registration } from '@chat/contracts/auth';
   let {
-    api,
-    onRegistered,
+    onRegister,
     onSignIn,
   }: {
-    api: ApiClient;
-    onRegistered: (user: CurrentUser, expiresAt: number) => void;
+    onRegister: (input: Registration) => Promise<void>;
     onSignIn: () => void;
   } = $props();
 </script>
@@ -21,7 +18,7 @@
       <Heading tag="h1" class="text-2xl">Create an account</Heading>
       <P size="sm">Create an account to start chatting.</P>
     </header>
-    <RegistrationForm {api} {onRegistered} />
+    <RegistrationForm {onRegister} />
     <Button color="alternative" onclick={onSignIn}
       >Already have an account? Sign in</Button
     >

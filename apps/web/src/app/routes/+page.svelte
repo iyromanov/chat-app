@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { CurrentUser } from '@chat/contracts/users';
+  import type { Registration } from '@chat/contracts/auth';
   import { ChatPage } from '@pages/chat';
   import { LoginPage } from '@pages/login';
   import { RegisterPage } from '@pages/register';
@@ -9,30 +9,17 @@
   const runtime = createAppRuntime();
   const auth = runtime.auth;
   let registering = $state(false);
-  let logoutError = $state('');
-
-  function signedIn(user: CurrentUser, expiresAt: number) {
+  async function register(input: Registration) {
+    await runtime.session.register(input);
     registering = false;
-    logoutError = '';
-    auth.signedIn(user, expiresAt);
-  }
-
-  async function logout() {
-    logoutError = '';
-    try {
-      await auth.logout();
-    } catch {
-      logoutError = 'Unable to sign out. Please try again';
-    }
   }
 
   onMount(() => {
-    auth.restore();
+    runtime.start();
     return runtime.dispose;
   });
 </script>
 
-<svelte:window onstorage={auth.storageChanged} />
 <svelte:document onvisibilitychange={runtime.visibilityChanged} />
 
 <svelte:head
@@ -52,7 +39,7 @@
   <main class="grid min-h-dvh place-items-center p-6">
     <div class="flex w-full max-w-md flex-col gap-4">
       <Alert color="red" role="alert">{auth.state.error}</Alert>
-      <Button onclick={auth.restore}>Try again</Button>
+      <Button onclick={runtime.session.restore}>Try again</Button>
     </div>
   </main>
 {:else if auth.state.status === 'authenticated' && runtime.context}
@@ -65,20 +52,14 @@
         messages={context.chat.messages}
         userId={auth.state.user.id}
         composer={context.chat.composer}
-        onLogout={logout}
-        {logoutError}
+        onLogout={runtime.session.logout}
       />{/key}
   </main>
 {:else if registering}
-  <RegisterPage
-    api={runtime.api}
-    onRegistered={signedIn}
-    onSignIn={() => (registering = false)}
-  />
+  <RegisterPage onRegister={register} onSignIn={() => (registering = false)} />
 {:else}
   <LoginPage
-    api={runtime.api}
-    onLoggedIn={signedIn}
-    onRegister={() => (registering = true)}
+    onLogin={runtime.session.login}
+    onCreateAccount={() => (registering = true)}
   />
 {/if}

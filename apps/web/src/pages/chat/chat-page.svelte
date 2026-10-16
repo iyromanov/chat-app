@@ -18,7 +18,6 @@
     userId,
     composer,
     onLogout,
-    logoutError,
     connectionState,
   }: {
     api: ApiClient;
@@ -27,7 +26,6 @@
     userId: string;
     composer: MessageComposerStore;
     onLogout: () => Promise<void>;
-    logoutError: string;
     connectionState: string;
   } = $props();
   const users = createUserSearch(() => api);
@@ -39,6 +37,7 @@
   let searchActive = $state(false);
   let menuOpen = $state(false);
   let signingOut = $state(false);
+  let logoutError = $state('');
   let menuElement: HTMLDivElement;
   let searchInput = $state<HTMLInputElement>();
   let viewportHeight = $state<number>();
@@ -87,9 +86,13 @@
   }
 
   async function logout() {
+    if (signingOut) return;
     signingOut = true;
+    logoutError = '';
     try {
       await onLogout();
+    } catch {
+      logoutError = 'Unable to sign out. Please try again';
     } finally {
       signingOut = false;
       menuOpen = false;

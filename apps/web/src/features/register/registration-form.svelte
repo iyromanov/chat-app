@@ -1,14 +1,11 @@
 <script lang="ts">
-  import { registrationSchema } from '@chat/contracts/auth';
-  import { type CurrentUser } from '@chat/contracts/users';
-  import { ApiError, readAuthDeadline, type ApiClient } from '@shared/api';
+  import { registrationSchema, type Registration } from '@chat/contracts/auth';
+  import { ApiError } from '@shared/api';
   import { Alert, Button, Helper, Input, Label } from 'flowbite-svelte';
   let {
-    api,
-    onRegistered,
+    onRegister,
   }: {
-    api: ApiClient;
-    onRegistered: (user: CurrentUser, expiresAt: number) => void;
+    onRegister: (input: Registration) => Promise<void>;
   } = $props();
   let email = $state('');
   let username = $state('');
@@ -33,12 +30,8 @@
     }
     pending = true;
     try {
-      const response = await api.auth.register(parsed.data);
-      const { data } = response;
-      if (data) {
-        password = '';
-        onRegistered(data, readAuthDeadline(response));
-      }
+      await onRegister(parsed.data);
+      password = '';
     } catch (cause) {
       error =
         cause instanceof ApiError

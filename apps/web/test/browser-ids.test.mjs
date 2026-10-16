@@ -23,20 +23,11 @@ const server = await createServer({
 });
 after(() => server.close());
 
-test('sending and logout work without crypto.randomUUID', async () => {
+test('sending works without crypto.randomUUID', async () => {
   const originalCrypto = Object.getOwnPropertyDescriptor(globalThis, 'crypto');
-  const originalStorage = Object.getOwnPropertyDescriptor(
-    globalThis,
-    'localStorage',
-  );
   Object.defineProperty(globalThis, 'crypto', {
     configurable: true,
     value: { getRandomValues: webcrypto.getRandomValues.bind(webcrypto) },
-  });
-  const storage = new Map();
-  Object.defineProperty(globalThis, 'localStorage', {
-    configurable: true,
-    value: { setItem: (key, value) => storage.set(key, value) },
   });
   try {
     const { createMessageComposer } = await server.ssrLoadModule(
@@ -76,25 +67,8 @@ test('sending and logout work without crypto.randomUUID', async () => {
     composer.drafts.conversation.text = 'Another message';
     await composer.send('conversation');
     assert.notEqual(requests[2].attemptId, requests[0].attemptId);
-
-    const { createAuth } = await server.ssrLoadModule(
-      '/src/app/auth/auth.svelte.ts',
-    );
-    const auth = createAuth(
-      () => ({ auth: { logout: async () => ({}) } }),
-      () => {},
-    );
-    await auth.logout();
-    assert.equal(auth.state.status, 'anonymous');
-    const firstLogout = storage.get('chat:logout');
-    assert.match(firstLogout, /^[a-f0-9]{32}$/);
-    await auth.logout();
-    assert.notEqual(storage.get('chat:logout'), firstLogout);
   } finally {
-    for (const [key, descriptor] of [
-      ['crypto', originalCrypto],
-      ['localStorage', originalStorage],
-    ]) {
+    for (const [key, descriptor] of [['crypto', originalCrypto]]) {
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);
       else delete globalThis[key];
     }

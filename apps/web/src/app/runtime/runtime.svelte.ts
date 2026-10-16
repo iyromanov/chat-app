@@ -1,6 +1,6 @@
 import type { CurrentUser } from '@chat/contracts/users';
 import { createApi } from '@shared/api';
-import { createAuth } from '../auth';
+import { AuthStore, SessionController, type AuthView } from '../auth';
 import { createChat } from '../chat';
 import { createRealtime } from '../realtime';
 
@@ -16,19 +16,16 @@ export function createAppRuntime(
 ) {
   let generation = 0;
   let disposed = false;
+  let started: Promise<void> | undefined;
   let context = $state.raw<AuthenticatedContext | null>(null);
-  let api = $state.raw(createClient());
-  const auth = createAuth(() => api, userChanged);
-
-  function createClient() {
-    const clientGeneration = generation;
-    return createApi({
-      ...options,
-      onUnauthorized: () => {
-        if (!disposed && clientGeneration === generation) auth.invalidate();
-      },
-    });
-  }
+  const auth = new AuthStore();
+  const publicApi = createApi({ ...options, onUnauthorized: () => {} });
+  const session = new SessionController(
+    auth,
+    publicApi.auth,
+    () => context?.api.auth,
+    userChanged,
+  );
 
   function userChanged(user: CurrentUser | null) {
     generation++;
@@ -36,8 +33,16 @@ export function createAppRuntime(
     context = null;
     previous?.dispose();
     if (disposed) return;
-    api = createClient();
     if (!user) return;
+
+    const contextGeneration = generation;
+    const isCurrent = () => !disposed && contextGeneration === generation;
+    const api = createApi({
+      ...options,
+      onUnauthorized: () => {
+        if (isCurrent()) session.end();
+      },
+    });
 
     const chat = createChat(api, user.id);
     let connectionState = $state('Connecting…');
@@ -51,9 +56,11 @@ export function createAppRuntime(
       },
       connectionFailed: () => {
         connectionState = 'Disconnected — reconnecting…';
-        auth.revalidate();
+        if (isCurrent()) session.revalidate();
       },
-      authEnded: auth.invalidate,
+      authEnded: () => {
+        if (isCurrent()) session.end();
+      },
       conversationCreated: chat.conversationCreated,
       messageCreated: chat.messageCreated,
     });
@@ -73,21 +80,24 @@ export function createAppRuntime(
   }
 
   return {
-    auth,
-    get api() {
-      return api;
-    },
+    auth: auth as AuthView,
+    session,
     get context() {
       return context;
     },
     visibilityChanged() {
       if (document.visibilityState !== 'visible' || !context) return;
-      auth.revalidate();
+      session.revalidate();
       context.chat.refresh();
     },
+    start() {
+      if (disposed) return Promise.resolve();
+      return (started ??= session.restore());
+    },
     dispose() {
+      if (disposed) return;
       disposed = true;
-      auth.dispose();
+      session.dispose();
     },
   };
 }
