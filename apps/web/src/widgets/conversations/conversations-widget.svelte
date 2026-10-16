@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Alert, Button, Spinner } from 'flowbite-svelte';
-  import type { ConversationStore } from '@entities/conversation';
+  import type { ConversationsView } from '@entities/conversation';
   import { UserAvatar } from '@entities/user';
   import { InfiniteScroll } from '@shared/ui';
   import { formatTime } from '@shared/lib';
@@ -8,10 +8,12 @@
     conversations,
     selectedId,
     onSelect,
+    onLoad,
   }: {
-    conversations: ConversationStore;
+    conversations: ConversationsView;
     selectedId: string | null;
     onSelect: (id: string) => void;
+    onLoad: (more?: boolean) => Promise<void>;
   } = $props();
 </script>
 
@@ -66,8 +68,7 @@
       <div class="space-y-3 p-4">
         <Alert color="red" role="alert">{conversations.error}</Alert><Button
           size="sm"
-          onclick={() => conversations.load(!!conversations.nextCursor)}
-          >Try again</Button
+          onclick={() => onLoad(conversations.failedLoadMore)}>Try again</Button
         >
       </div>
     {:else if conversations.items.length === 0}
@@ -78,7 +79,7 @@
         </p>
       </div>
     {:else if conversations.nextCursor}
-      <InfiniteScroll onLoad={() => conversations.load(true)} />
+      <InfiniteScroll onLoad={() => onLoad(true)} />
     {/if}
   </div>
 </section>

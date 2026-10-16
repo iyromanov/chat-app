@@ -1,2 +1,6 @@
-export { createConversations } from './conversations.svelte';
-export type { ConversationStore } from './conversations.svelte';
+export {
+  createConversations,
+  type ConversationStore,
+  type ConversationsView,
+  type ConversationView,
+} from './conversations.svelte';

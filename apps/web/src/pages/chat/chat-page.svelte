@@ -5,9 +5,12 @@
   import type { ApiClient } from '@shared/api';
   import { Icon, InfiniteScroll } from '@shared/ui';
   import { MessageHistory } from '@widgets/message-history';
-  import type { MessageStore } from '@entities/message';
+  import type { MessagesView } from '@entities/message';
   import { ConversationsWidget } from '@widgets/conversations';
-  import type { ConversationStore } from '@entities/conversation';
+  import type {
+    ConversationsView,
+    ConversationView,
+  } from '@entities/conversation';
   import { createUserSearch } from '@features/find-users';
   import { StartConversation } from '@features/start-conversation';
   let {
@@ -16,21 +19,31 @@
     messages,
     userId,
     onSend,
+    onOpen,
+    onLoadMessages,
+    onLoadConversations,
+    onConversationCreated,
     onLogout,
     connectionState,
   }: {
     api: ApiClient;
-    conversations: ConversationStore;
-    messages: MessageStore;
+    conversations: ConversationsView;
+    messages: MessagesView;
     userId: string;
     onSend: (conversationId: string, text: string) => Promise<void>;
+    onOpen: (conversationId: string) => Promise<void>;
+    onLoadMessages: (more?: boolean) => Promise<void>;
+    onLoadConversations: (more?: boolean) => Promise<void>;
+    onConversationCreated: (conversation: Conversation) => void;
     onLogout: () => Promise<void>;
     connectionState: string;
   } = $props();
   const users = createUserSearch(() => api);
-  let selectedId = $state<string | null>(null);
+  let selectedConversation = $state.raw<ConversationView | null>(null);
+  let selectedId = $derived(selectedConversation?.id ?? null);
   let selected = $derived(
-    conversations.items.find((item) => item.id === selectedId),
+    conversations.items.find((item) => item.id === selectedId) ??
+      selectedConversation,
   );
   let view = $state<'list' | 'search' | 'chat'>('list');
   let searchActive = $state(false);
@@ -43,13 +56,15 @@
   let viewportTop = $state(0);
 
   function select(id: string) {
-    selectedId = id;
-    messages.open(id);
+    const conversation = conversations.items.find((item) => item.id === id);
+    if (!conversation) return;
+    selectedConversation = conversation;
+    onOpen(id);
     view = 'chat';
   }
 
   function started(conversation: Conversation) {
-    conversations.upsert(conversation);
+    onConversationCreated(conversation);
     select(conversation.id);
   }
 
@@ -243,7 +258,12 @@
       </div>
     </div>
     <div class={['min-h-0 flex-1', searchActive ? 'hidden' : 'block']}>
-      <ConversationsWidget {conversations} {selectedId} onSelect={select} />
+      <ConversationsWidget
+        {conversations}
+        {selectedId}
+        onSelect={select}
+        onLoad={onLoadConversations}
+      />
     </div>
     <section
       aria-label="Search results"
@@ -294,6 +314,7 @@
     {#if selected}
       <MessageHistory
         {messages}
+        onLoad={onLoadMessages}
         {connectionState}
         conversation={selected}
         {onSend}

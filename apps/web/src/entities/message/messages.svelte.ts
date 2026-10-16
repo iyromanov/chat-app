@@ -1,104 +1,106 @@
 import type { Message } from '@chat/contracts/messages';
-import type { ApiClient } from '@shared/api';
 
-class Messages {
-  private generation = 0;
-  private refreshPending = false;
-  private initialized = false;
-  private oldestLoadedId: string | null = null;
+export type MessagesView = {
+  readonly conversationId: string | null;
+  readonly items: readonly Readonly<Message>[];
+  readonly nextCursor: string | null;
+  readonly loading: boolean;
+  readonly error: string;
+  readonly failedLoadMore: boolean;
+};
 
-  conversationId = $state<string | null>(null);
-  items = $state.raw<Message[]>([]);
-  nextCursor = $state<string | null>(null);
-  loading = $state(false);
-  error = $state('');
-  failedLoadMore = $state(false);
+class Messages implements MessagesView {
+  private currentConversationId = $state<string | null>(null);
+  private currentItems = $state.raw<Message[]>([]);
+  private cursor = $state<string | null>(null);
+  private pending = $state(false);
+  private failure = $state('');
+  private failedMore = $state(false);
 
-  constructor(private readonly api: ApiClient) {}
+  get conversationId() {
+    return this.currentConversationId;
+  }
 
-  upsert = (message: Message) => {
-    if (message.conversationId !== this.conversationId) return;
-    this.items = [
-      ...this.items.filter((item) => item.id !== message.id),
-      message,
-    ].sort(
-      (a, b) =>
-        a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
-    );
-  };
+  get items(): MessagesView['items'] {
+    return this.currentItems;
+  }
 
-  open = (conversationId: string) => {
-    if (this.conversationId === conversationId) return;
+  get nextCursor() {
+    return this.cursor;
+  }
+
+  get loading() {
+    return this.pending;
+  }
+
+  get error() {
+    return this.failure;
+  }
+
+  get failedLoadMore() {
+    return this.failedMore;
+  }
+
+  select(conversationId: string) {
     this.clear();
-    this.conversationId = conversationId;
-    this.load();
-  };
+    this.currentConversationId = conversationId;
+  }
 
-  clear = () => {
-    this.generation++;
-    this.conversationId = null;
-    this.items = [];
-    this.nextCursor = null;
-    this.loading = false;
-    this.error = '';
-    this.failedLoadMore = false;
-    this.refreshPending = false;
-    this.initialized = false;
-    this.oldestLoadedId = null;
-  };
+  upsert(message: Message) {
+    if (message.conversationId !== this.currentConversationId) return;
+    this.currentItems = [
+      ...this.currentItems.filter((item) => item.id !== message.id),
+      message,
+    ].sort(compareMessages);
+  }
 
-  load = async (more = false) => {
-    if (!this.conversationId) return;
-    if (this.loading) {
-      if (!more) this.refreshPending = true;
-      return;
+  receivePage(
+    items: Message[],
+    nextCursor: string | null,
+    more: boolean,
+    eventIds: ReadonlySet<string>,
+  ) {
+    if (!more) {
+      const newest = items.at(-1);
+      this.currentItems = this.currentItems.filter(
+        (item) =>
+          eventIds.has(item.id) ||
+          (newest && compareMessages(item, newest) > 0),
+      );
     }
-    if (more && !this.nextCursor) return;
-    const generation = this.generation;
-    const conversationId = this.conversationId;
-    this.loading = true;
-    this.error = '';
-    try {
-      const recovering = !more && this.initialized;
-      const boundaryId = this.oldestLoadedId;
-      let reachedBoundary = false;
-      let cursor = more ? this.nextCursor : null;
-      let oldestLoadedId = this.oldestLoadedId;
-      do {
-        const { data } = await this.api.messages.list(conversationId, {
-          cursor: cursor ?? undefined,
-        });
-        if (generation !== this.generation || !data) return;
-        for (const message of data.items) {
-          this.upsert(message);
-        }
-        oldestLoadedId = data.items[0]?.id ?? oldestLoadedId;
-        reachedBoundary ||= data.items.some(
-          (message) => message.id === boundaryId,
-        );
-        cursor = data.nextCursor;
-      } while (recovering && cursor && !reachedBoundary);
-      this.oldestLoadedId = oldestLoadedId;
-      this.nextCursor = cursor;
-      if (!more) this.initialized = true;
-    } catch {
-      if (generation === this.generation) {
-        this.failedLoadMore = more;
-        this.error = 'Unable to load messages. Please try again';
-      }
-    } finally {
-      if (generation === this.generation) {
-        this.loading = false;
-        if (this.refreshPending) {
-          this.refreshPending = false;
-          this.load();
-        }
-      }
-    }
-  };
+    for (const item of items) this.upsert(item);
+    this.cursor = nextCursor;
+    this.pending = false;
+  }
+
+  beginLoad() {
+    this.pending = true;
+    this.failure = '';
+    this.failedMore = false;
+  }
+
+  failLoad(more: boolean) {
+    this.pending = false;
+    this.failedMore = more;
+    this.failure = 'Unable to load messages. Please try again';
+  }
+
+  clear() {
+    this.currentConversationId = null;
+    this.currentItems = [];
+    this.cursor = null;
+    this.pending = false;
+    this.failure = '';
+    this.failedMore = false;
+  }
 }
+
+function compareMessages(a: Message, b: Message) {
+  return a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id);
+}
+
 export type MessageStore = Messages;
 
-export function createMessages(api: ApiClient): MessageStore {
-  return new Messages(api);
+export function createMessages(): MessageStore {
+  return new Messages();
 }

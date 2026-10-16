@@ -1,25 +1,52 @@
 import type { Conversation } from '@chat/contracts/conversations';
 import type { Message } from '@chat/contracts/messages';
-import type { ApiClient } from '@shared/api';
 
-class Conversations {
-  private generation = 0;
+export type ConversationView = Readonly<
+  Omit<Conversation, 'counterpart' | 'lastMessage'>
+> & {
+  readonly counterpart: Readonly<Conversation['counterpart']>;
+  readonly lastMessage: Readonly<Message> | null;
+};
 
-  private refreshPending = false;
-  private loadingTask: Promise<void> | null = null;
+export type ConversationsView = {
+  readonly items: readonly ConversationView[];
+  readonly nextCursor: string | null;
+  readonly loading: boolean;
+  readonly error: string;
+  readonly failedLoadMore: boolean;
+};
 
-  items = $state.raw<Conversation[]>([]);
+class Conversations implements ConversationsView {
+  private currentItems = $state.raw<Conversation[]>([]);
+  private cursor = $state<string | null>(null);
+  private pending = $state(false);
+  private failure = $state('');
+  private failedMore = $state(false);
 
-  nextCursor = $state<string | null>(null);
+  get items(): ConversationsView['items'] {
+    return this.currentItems;
+  }
 
-  loading = $state(false);
+  get nextCursor() {
+    return this.cursor;
+  }
 
-  error = $state('');
+  get loading() {
+    return this.pending;
+  }
 
-  constructor(private readonly api: ApiClient) {}
+  get error() {
+    return this.failure;
+  }
 
-  upsert = (conversation: Conversation) => {
-    const previous = this.items.find((item) => item.id === conversation.id);
+  get failedLoadMore() {
+    return this.failedMore;
+  }
+
+  upsert(conversation: Conversation) {
+    const previous = this.currentItems.find(
+      (item) => item.id === conversation.id,
+    );
     const before = previous?.lastMessage;
     const incoming = conversation.lastMessage;
     if (
@@ -29,8 +56,8 @@ class Conversations {
         (before.createdAt === incoming.createdAt && before.id > incoming.id))
     )
       conversation = { ...conversation, lastMessage: before };
-    this.items = [
-      ...this.items.filter((item) => item.id !== conversation.id),
+    this.currentItems = [
+      ...this.currentItems.filter((item) => item.id !== conversation.id),
       conversation,
     ].sort(
       (a, b) =>
@@ -38,72 +65,56 @@ class Conversations {
           a.lastMessage?.createdAt ?? a.createdAt,
         ) || b.id.localeCompare(a.id),
     );
-  };
+  }
 
-  applyMessage = (message: Message) => {
-    const conversation = this.items.find(
+  applyMessage(message: Message) {
+    const conversation = this.currentItems.find(
       (item) => item.id === message.conversationId,
     );
     if (!conversation) return false;
     this.upsert({ ...conversation, lastMessage: message });
     return true;
-  };
+  }
 
-  clear = () => {
-    this.generation++;
-    this.refreshPending = false;
-    this.loadingTask = null;
-    this.items = [];
-    this.nextCursor = null;
-    this.loading = false;
-    this.error = '';
-  };
-
-  load = (more = false): Promise<void> => {
-    if (this.loading) {
-      if (!more) this.refreshPending = true;
-      return this.loadingTask ?? Promise.resolve();
+  receivePage(
+    items: Conversation[],
+    nextCursor: string | null,
+    more: boolean,
+    eventIds: ReadonlySet<string>,
+  ) {
+    // Merge before trimming so a stale response cannot roll back a known preview.
+    for (const item of items) this.upsert(item);
+    if (!more) {
+      const ids = new Set([...items.map((item) => item.id), ...eventIds]);
+      this.currentItems = this.currentItems.filter((item) => ids.has(item.id));
     }
-    this.loadingTask = this.loadPages(more);
-    return this.loadingTask;
-  };
+    this.cursor = nextCursor;
+    this.pending = false;
+  }
 
-  private async loadPages(more: boolean): Promise<void> {
-    if (more && !this.nextCursor) return;
-    const generation = this.generation;
-    this.loading = true;
-    this.error = '';
-    try {
-      let remaining = more ? [] : this.items.map((item) => item.id);
-      let cursor = more ? this.nextCursor : null;
-      do {
-        const { data } = await this.api.conversations.list({
-          cursor: cursor ?? undefined,
-        });
-        if (generation !== this.generation || !data) return;
-        for (const item of data.items) {
-          this.upsert(item);
-          remaining = remaining.filter((id) => id !== item.id);
-        }
-        cursor = data.nextCursor;
-        this.nextCursor = cursor;
-      } while (!more && cursor && remaining.length);
-    } catch {
-      if (generation === this.generation)
-        this.error = 'Unable to load conversations. Please try again';
-    } finally {
-      if (generation === this.generation) {
-        this.loading = false;
-        if (this.refreshPending) {
-          this.refreshPending = false;
-          await this.loadPages(false);
-        }
-      }
-    }
+  beginLoad() {
+    this.pending = true;
+    this.failure = '';
+    this.failedMore = false;
+  }
+
+  failLoad(more: boolean) {
+    this.pending = false;
+    this.failedMore = more;
+    this.failure = 'Unable to load conversations. Please try again';
+  }
+
+  clear() {
+    this.currentItems = [];
+    this.cursor = null;
+    this.pending = false;
+    this.failure = '';
+    this.failedMore = false;
   }
 }
+
 export type ConversationStore = Conversations;
 
-export function createConversations(api: ApiClient) {
-  return new Conversations(api);
+export function createConversations(): ConversationStore {
+  return new Conversations();
 }

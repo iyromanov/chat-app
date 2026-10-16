@@ -48,8 +48,8 @@ export function createAppRuntime(
 
     const chat = new ChatController(
       api,
-      createConversations(api),
-      createMessages(api),
+      createConversations(),
+      createMessages(),
     );
     let connectionState = $state('Connecting…');
     const realtime = createRealtime(options.baseUrl, {

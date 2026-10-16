@@ -263,7 +263,10 @@ test('logout failures preserve the current context; an unauthorized response end
   const { runtime, routes, sockets } = await fixture(t);
   const context = await signIn(runtime);
   await until(
-    () => sockets.length === 1 && !context.chat.conversations.loading,
+    () =>
+      sockets.length === 1 &&
+      context.connectionState === 'Connected' &&
+      !context.chat.conversations.loading,
   );
   context.chat.conversationCreated(conversation);
   for (const failure of ['server', 'network']) {
@@ -381,12 +384,15 @@ test('restoration, socket events and reconnect share chat synchronization', asyn
   assert.equal(runtime.auth.state.status, 'authenticated');
   const context = runtime.context;
   await until(
-    () => sockets.length === 1 && !context.chat.conversations.loading,
+    () =>
+      sockets.length === 1 &&
+      context.connectionState === 'Connected' &&
+      !context.chat.conversations.loading,
   );
   const socket = sockets[0];
   socket.emit('conversation:created', conversation);
   await until(() => context.chat.conversations.items.length === 1);
-  context.chat.messages.open(conversation.id);
+  context.chat.openConversation(conversation.id);
   await until(() => !context.chat.messages.loading);
   socket.emit('message:created', message);
   await until(() => context.chat.messages.items.length === 1);
@@ -403,6 +409,12 @@ test('restoration, socket events and reconnect share chat synchronization', asyn
   };
   routes.set(`/api/conversations/${conversation.id}/messages`, (response) =>
     json(response, { items: [message, missed], nextCursor: null }),
+  );
+  routes.set('/api/conversations', (response) =>
+    json(response, {
+      items: [{ ...conversation, lastMessage: missed }],
+      nextCursor: null,
+    }),
   );
   socket.conn.close();
   await until(
@@ -673,7 +685,7 @@ test('API client handles empty logout responses and normalizes HTTP errors', asy
   assert.equal(unauthorized, 1);
 });
 
-test('initial and multi-page recovery merge live messages through the REST-loaded boundary', async (t) => {
+test('initial load and first-page refresh merge live events and reset the older history cursor', async (t) => {
   const { runtime, routes, sockets } = await fixture(t);
   const context = await signIn(runtime);
   await until(() => sockets.length === 1);
@@ -687,7 +699,7 @@ test('initial and multi-page recovery merge live messages through the REST-loade
       json(response, { items: [message], nextCursor: 'older-history' }),
     );
   });
-  context.chat.messages.open(conversation.id);
+  context.chat.openConversation(conversation.id);
   await initialStarted.promise;
   const live = {
     ...message,
@@ -737,6 +749,12 @@ test('initial and multi-page recovery merge live messages through the REST-loade
   await until(() => !context.chat.messages.loading);
   assert.deepEqual(
     context.chat.messages.items.map((item) => item.id),
+    [live.id, boundary.id],
+  );
+  assert.equal(context.chat.messages.nextCursor, 'new-page');
+  await context.chat.loadMessages(true);
+  assert.deepEqual(
+    context.chat.messages.items.map((item) => item.id),
     [message.id, missed.id, live.id, boundary.id],
   );
   assert.equal(context.chat.messages.nextCursor, 'older-reconciled');
@@ -749,7 +767,7 @@ test('logout during recovery discards late pages and never restarts private load
   routes.set(path, (response) =>
     json(response, { items: [message], nextCursor: null }),
   );
-  context.chat.messages.open(conversation.id);
+  context.chat.openConversation(conversation.id);
   await until(() => !context.chat.messages.loading);
   const started = deferred();
   const ready = deferred();
@@ -773,7 +791,7 @@ test('logout during recovery discards late pages and never restarts private load
   );
 });
 
-test('conversation refresh updates loaded pages and keeps newer live activity over stale REST', async (t) => {
+test('conversation refresh resets to its first page and keeps newer live activity over stale REST', async (t) => {
   const { runtime, routes, sockets } = await fixture(t);
   const older = {
     ...conversation,
@@ -791,9 +809,12 @@ test('conversation refresh updates loaded pages and keeps newer live activity ov
   );
   const context = await signIn(runtime);
   await until(
-    () => sockets.length === 1 && !context.chat.conversations.loading,
+    () =>
+      sockets.length === 1 &&
+      context.connectionState === 'Connected' &&
+      !context.chat.conversations.loading,
   );
-  await context.chat.conversations.load(true);
+  await context.chat.loadConversations(true);
   const started = deferred();
   const ready = deferred();
   const activity = {
@@ -828,17 +849,26 @@ test('conversation refresh updates loaded pages and keeps newer live activity ov
   await until(() => !context.chat.conversations.loading);
   assert.deepEqual(
     context.chat.conversations.items.map((item) => item.id),
-    [older.id, conversation.id],
+    [older.id],
   );
   assert.equal(context.chat.conversations.items[0].lastMessage.id, newer.id);
+  assert.equal(context.chat.conversations.nextCursor, 'refresh-rest');
+  await context.chat.loadConversations(true);
+  assert.deepEqual(
+    context.chat.conversations.items.map((item) => item.id),
+    [older.id, conversation.id],
+  );
   assert.equal(context.chat.conversations.nextCursor, null);
 });
 
-test('recovery reconciles a late commit behind the newest message and refreshes the older boundary', async (t) => {
+test('refresh reconciles late commits in its latest page and discards previously loaded older history', async (t) => {
   const { runtime, routes, requests, sockets } = await fixture(t);
   const context = await signIn(runtime);
   await until(
-    () => sockets.length === 1 && !context.chat.conversations.loading,
+    () =>
+      sockets.length === 1 &&
+      context.connectionState === 'Connected' &&
+      !context.chat.conversations.loading,
   );
   const path = `/api/conversations/${conversation.id}/messages`;
   const newest = {
@@ -854,7 +884,7 @@ test('recovery reconciles a late commit behind the newest message and refreshes 
   routes.set(path, (response) =>
     json(response, { items: [message, newest], nextCursor: 'older-original' }),
   );
-  context.chat.messages.open(conversation.id);
+  context.chat.openConversation(conversation.id);
   await until(() => !context.chat.messages.loading);
   assert.deepEqual(
     context.chat.messages.items.map((item) => item.id),
@@ -871,7 +901,7 @@ test('recovery reconciles a late commit behind the newest message and refreshes 
       nextCursor: 'older-refreshed',
     }),
   );
-  await context.chat.messages.load();
+  await context.chat.loadMessages();
   assert.deepEqual(
     context.chat.messages.items.map((item) => item.id),
     [message.id, late.id, newest.id],
@@ -890,7 +920,7 @@ test('recovery reconciles a late commit behind the newest message and refreshes 
   routes.set(`${path}?cursor=older-refreshed`, (response) =>
     json(response, { items: [older], nextCursor: null }),
   );
-  await context.chat.messages.load(true);
+  await context.chat.loadMessages(true);
   assert.deepEqual(
     context.chat.messages.items.map((item) => item.id),
     [older.id, message.id, late.id, newest.id],
@@ -913,7 +943,17 @@ test('recovery reconciles a late commit behind the newest message and refreshes 
       nextCursor: 'unloaded-history',
     }),
   );
-  await context.chat.messages.load();
+  await context.chat.loadMessages();
+  assert.deepEqual(
+    context.chat.messages.items.map((item) => item.id),
+    [message.id, late.id, newest.id],
+  );
+  assert.equal(context.chat.messages.nextCursor, 'loaded-older-page');
+  assert.equal(
+    requests.some((url) => url.includes('loaded-older-page')),
+    false,
+  );
+  await context.chat.loadMessages(true);
   assert.deepEqual(
     context.chat.messages.items.map((item) => item.id),
     [older.id, lateInOlderPage.id, message.id, late.id, newest.id],
@@ -925,11 +965,14 @@ test('recovery reconciles a late commit behind the newest message and refreshes 
   );
 });
 
-test('an initially empty history reconciles all 105 missed messages even when an event raced its first response', async (t) => {
+test('refresh loads only the latest 50 missed messages and leaves the rest for Load more', async (t) => {
   const { runtime, routes, sockets } = await fixture(t);
   const context = await signIn(runtime);
   await until(
-    () => sockets.length === 1 && !context.chat.conversations.loading,
+    () =>
+      sockets.length === 1 &&
+      context.connectionState === 'Connected' &&
+      !context.chat.conversations.loading,
   );
   const path = `/api/conversations/${conversation.id}/messages`;
   const missed = Array.from({ length: 105 }, (_, index) => ({
@@ -945,7 +988,7 @@ test('an initially empty history reconciles all 105 missed messages even when an
       json(response, { items: [], nextCursor: null }),
     );
   });
-  context.chat.messages.open(conversation.id);
+  context.chat.openConversation(conversation.id);
   await initialStarted.promise;
   sockets[0].emit('message:created', missed[104]);
   await until(() => context.chat.messages.items.length === 1);
@@ -961,11 +1004,14 @@ test('an initially empty history reconciles all 105 missed messages even when an
   routes.set(`${path}?cursor=oldest`, (response) =>
     json(response, { items: missed.slice(0, 5), nextCursor: null }),
   );
-  await context.chat.messages.load();
-  assert.deepEqual(
-    context.chat.messages.items.map((item) => item.id),
-    missed.map((item) => item.id),
-  );
+  await context.chat.loadMessages();
+  assert.deepEqual(context.chat.messages.items, missed.slice(55));
+  assert.equal(context.chat.messages.nextCursor, 'middle');
+  await context.chat.loadMessages(true);
+  assert.deepEqual(context.chat.messages.items, missed.slice(5));
+  assert.equal(context.chat.messages.nextCursor, 'oldest');
+  await context.chat.loadMessages(true);
+  assert.deepEqual(context.chat.messages.items, missed);
   assert.equal(context.chat.messages.nextCursor, null);
 });
 
@@ -981,7 +1027,10 @@ test('ordinary sends merge HTTP and WS by server ID in either order and preserve
   const { runtime, routes, sockets } = await fixture(t);
   const context = await signIn(runtime);
   await until(
-    () => sockets.length === 1 && !context.chat.conversations.loading,
+    () =>
+      sockets.length === 1 &&
+      context.connectionState === 'Connected' &&
+      !context.chat.conversations.loading,
   );
   context.chat.conversationCreated(conversation);
   const other = { ...conversation, id: '888888888888888888888888' };
@@ -991,7 +1040,7 @@ test('ordinary sends merge HTTP and WS by server ID in either order and preserve
     if (request.method === 'GET')
       return json(response, { items: [], nextCursor: null });
   });
-  context.chat.messages.open(conversation.id);
+  context.chat.openConversation(conversation.id);
   await until(() => !context.chat.messages.loading);
   const bodies = [];
   const saved = { ...message, senderId: user.id };
@@ -1043,7 +1092,10 @@ test('a lost send response remains an error even when WS delivers it and a new s
   const { runtime, routes, sockets } = await fixture(t);
   const context = await signIn(runtime);
   await until(
-    () => sockets.length === 1 && !context.chat.conversations.loading,
+    () =>
+      sockets.length === 1 &&
+      context.connectionState === 'Connected' &&
+      !context.chat.conversations.loading,
   );
   context.chat.conversationCreated(conversation);
   const path = `/api/conversations/${conversation.id}/messages`;
@@ -1058,7 +1110,7 @@ test('a lost send response remains an error even when WS delivers it and a new s
     if (bodies.length === 1) return response.destroy();
     json(response, second, 201);
   });
-  context.chat.messages.open(conversation.id);
+  context.chat.openConversation(conversation.id);
   await until(() => !context.chat.messages.loading);
   await assert.rejects(context.chat.sendMessage(conversation.id, 'Hello'));
   await until(() => context.chat.messages.items.length === 1);
@@ -1099,7 +1151,10 @@ test('a late send updates its own preview after switching history and cannot cha
   const { runtime, routes, sockets } = await fixture(t);
   const context = await signIn(runtime);
   await until(
-    () => sockets.length === 1 && !context.chat.conversations.loading,
+    () =>
+      sockets.length === 1 &&
+      context.connectionState === 'Connected' &&
+      !context.chat.conversations.loading,
   );
   context.chat.conversationCreated(conversation);
   const other = { ...conversation, id: '888888888888888888888888' };
@@ -1115,10 +1170,10 @@ test('a late send updates its own preview after switching history and cannot cha
     await ready.promise;
     json(response, message, 201);
   });
-  context.chat.messages.open(conversation.id);
+  await context.chat.openConversation(conversation.id);
   const send = context.chat.sendMessage(conversation.id, 'Hello');
   await started.promise;
-  context.chat.messages.open(other.id);
+  await context.chat.openConversation(other.id);
   ready.resolve();
   await send;
   assert.deepEqual(context.chat.messages.items, []);
@@ -1127,6 +1182,8 @@ test('a late send updates its own preview after switching history and cannot cha
   const lateStarted = deferred();
   const lateReady = deferred();
   routes.set(path, async (response, request) => {
+    if (request.method === 'GET')
+      return json(response, { items: [], nextCursor: null });
     await requestBody(request);
     lateStarted.resolve();
     await lateReady.promise;
@@ -1143,4 +1200,322 @@ test('a late send updates its own preview after switching history and cannot cha
   assert.deepEqual(current.chat.conversations.items, []);
   assert.deepEqual(context.chat.conversations.items, []);
   await assert.rejects(context.chat.sendMessage(conversation.id, 'Hello'));
+});
+
+test('switching conversations clears history immediately and ignores late success and failure responses', async (t) => {
+  const { runtime, routes, sockets } = await fixture(t);
+  const context = await signIn(runtime);
+  await until(
+    () =>
+      sockets.length === 1 &&
+      context.connectionState === 'Connected' &&
+      !context.chat.conversations.loading,
+  );
+  const other = { ...conversation, id: '888888888888888888888888' };
+  const otherMessage = { ...message, conversationId: other.id };
+  const path = `/api/conversations/${conversation.id}/messages`;
+  const otherPath = `/api/conversations/${other.id}/messages`;
+  routes.set(path, (response) =>
+    json(response, { items: [message], nextCursor: 'old' }),
+  );
+  await context.chat.openConversation(conversation.id);
+  for (const status of [200, 503]) {
+    const started = deferred();
+    const ready = deferred();
+    routes.set(path, async (response) => {
+      started.resolve();
+      await ready.promise;
+      json(response, { items: [message], nextCursor: 'late' }, status);
+    });
+    const stale = context.chat.loadMessages();
+    await started.promise;
+    const otherReady = deferred();
+    routes.set(otherPath, async (response) => {
+      await otherReady.promise;
+      json(response, { items: [otherMessage], nextCursor: null });
+    });
+    const opening = context.chat.openConversation(other.id);
+    assert.equal(context.chat.messages.conversationId, other.id);
+    assert.deepEqual(context.chat.messages.items, []);
+    assert.equal(context.chat.messages.loading, true);
+    assert.equal(context.chat.messages.nextCursor, null);
+    ready.resolve();
+    await stale;
+    assert.equal(context.chat.messages.loading, true);
+    assert.equal(context.chat.messages.error, '');
+    otherReady.resolve();
+    await opening;
+    assert.deepEqual(context.chat.messages.items, [otherMessage]);
+    routes.set(path, (response) =>
+      json(response, { items: [message], nextCursor: 'old' }),
+    );
+    await context.chat.openConversation(conversation.id);
+  }
+});
+
+test('initial history failure can retry an empty result and background errors preserve data, login and retry mode', async (t) => {
+  const { runtime, routes, sockets } = await fixture(t);
+  routes.set('/api/conversations', (response) =>
+    json(response, { items: [conversation], nextCursor: 'old-list' }),
+  );
+  const context = await signIn(runtime);
+  await until(
+    () =>
+      sockets.length === 1 &&
+      context.connectionState === 'Connected' &&
+      !context.chat.conversations.loading,
+  );
+  const path = `/api/conversations/${conversation.id}/messages`;
+  const fail = (response) => json(response, { message: 'Unavailable' }, 503);
+  routes.set(path, fail);
+  await context.chat.openConversation(conversation.id);
+  assert.equal(context.chat.messages.loading, false);
+  assert.ok(context.chat.messages.error);
+  assert.deepEqual(context.chat.messages.items, []);
+  routes.set(path, (response) =>
+    json(response, { items: [], nextCursor: null }),
+  );
+  await context.chat.loadMessages();
+  assert.equal(context.chat.messages.error, '');
+  assert.deepEqual(context.chat.messages.items, []);
+  routes.set(path, (response) =>
+    json(response, { items: [message], nextCursor: 'old-history' }),
+  );
+  await context.chat.loadMessages();
+  routes.set(`${path}?cursor=old-history`, fail);
+  routes.set('/api/conversations?cursor=old-list', fail);
+  await Promise.all([
+    context.chat.loadMessages(true),
+    context.chat.loadConversations(true),
+  ]);
+  assert.equal(context.chat.messages.failedLoadMore, true);
+  assert.equal(context.chat.conversations.failedLoadMore, true);
+  assert.equal(context.chat.messages.nextCursor, 'old-history');
+  assert.equal(context.chat.conversations.nextCursor, 'old-list');
+  routes.set(path, fail);
+  routes.set('/api/conversations', fail);
+  await context.chat.refresh();
+  assert.equal(context.chat.messages.failedLoadMore, false);
+  assert.equal(context.chat.conversations.failedLoadMore, false);
+  assert.ok(context.chat.messages.error);
+  assert.ok(context.chat.conversations.error);
+  assert.deepEqual(context.chat.messages.items, [message]);
+  assert.deepEqual(context.chat.conversations.items, [conversation]);
+  assert.equal(runtime.context, context);
+  assert.equal(runtime.auth.state.status, 'authenticated');
+  routes.set(path, (response) =>
+    json(response, { items: [], nextCursor: null }),
+  );
+  routes.set('/api/conversations', (response) =>
+    json(response, { items: [], nextCursor: null }),
+  );
+  await context.chat.refresh();
+  assert.equal(context.chat.messages.error, '');
+  assert.equal(context.chat.conversations.error, '');
+  assert.deepEqual(context.chat.messages.items, []);
+  assert.deepEqual(context.chat.conversations.items, []);
+  assert.equal(context.chat.messages.nextCursor, null);
+  assert.equal(context.chat.conversations.nextCursor, null);
+});
+
+test('refresh supersedes in-flight pagination and dispose invalidates pending history and list responses', async (t) => {
+  const { runtime, routes, sockets } = await fixture(t);
+  const path = `/api/conversations/${conversation.id}/messages`;
+  routes.set(path, (response) =>
+    json(response, { items: [message], nextCursor: 'old-history' }),
+  );
+  routes.set('/api/conversations', (response) =>
+    json(response, { items: [conversation], nextCursor: 'old-list' }),
+  );
+  const context = await signIn(runtime);
+  await until(
+    () =>
+      sockets.length === 1 &&
+      context.connectionState === 'Connected' &&
+      !context.chat.conversations.loading,
+  );
+  await context.chat.openConversation(conversation.id);
+  const ready = deferred();
+  const historyStarted = deferred();
+  const listStarted = deferred();
+  routes.set(`${path}?cursor=old-history`, async (response) => {
+    historyStarted.resolve();
+    await ready.promise;
+    json(response, { items: [message], nextCursor: 'obsolete-history' });
+  });
+  routes.set('/api/conversations?cursor=old-list', async (response) => {
+    listStarted.resolve();
+    await ready.promise;
+    json(response, { items: [conversation], nextCursor: 'obsolete-list' });
+  });
+  const old = Promise.all([
+    context.chat.loadMessages(true),
+    context.chat.loadConversations(true),
+  ]);
+  await Promise.all([historyStarted.promise, listStarted.promise]);
+  routes.set(path, (response) =>
+    json(response, { items: [], nextCursor: 'new-history' }),
+  );
+  routes.set('/api/conversations', (response) =>
+    json(response, { items: [], nextCursor: 'new-list' }),
+  );
+  await context.chat.refresh();
+  ready.resolve();
+  await old;
+  assert.deepEqual(context.chat.messages.items, []);
+  assert.deepEqual(context.chat.conversations.items, []);
+  assert.equal(context.chat.messages.nextCursor, 'new-history');
+  assert.equal(context.chat.conversations.nextCursor, 'new-list');
+  const lateReady = deferred();
+  const lateHistoryStarted = deferred();
+  const lateListStarted = deferred();
+  routes.set(path, async (response) => {
+    lateHistoryStarted.resolve();
+    await lateReady.promise;
+    json(response, { items: [message], nextCursor: 'late' });
+  });
+  routes.set('/api/conversations', async (response) => {
+    lateListStarted.resolve();
+    await lateReady.promise;
+    json(response, { items: [conversation], nextCursor: 'late' });
+  });
+  const late = context.chat.refresh();
+  await Promise.all([lateHistoryStarted.promise, lateListStarted.promise]);
+  runtime.dispose();
+  lateReady.resolve();
+  await late;
+  assert.deepEqual(context.chat.messages.items, []);
+  assert.deepEqual(context.chat.conversations.items, []);
+  assert.equal(context.chat.messages.nextCursor, null);
+  assert.equal(context.chat.conversations.nextCursor, null);
+  assert.equal(context.chat.messages.loading, false);
+  assert.equal(context.chat.conversations.loading, false);
+});
+
+test('reconnect and returning to a visible tab replace loaded ranges and paginate from new cursors', async (t) => {
+  for (const trigger of ['reconnect', 'visibility']) {
+    await t.test(trigger, async (t) => {
+      const { runtime, routes, requests, sockets } = await fixture(t);
+      const path = `/api/conversations/${conversation.id}/messages`;
+      const older = { ...message, id: '333333333333333333333333' };
+      const other = {
+        ...conversation,
+        id: '888888888888888888888888',
+        createdAt: '2026-10-15T09:00:00.000Z',
+      };
+      routes.set('/api/conversations', (response) =>
+        json(response, { items: [conversation], nextCursor: 'old-list' }),
+      );
+      routes.set('/api/conversations?cursor=old-list', (response) =>
+        json(response, { items: [other], nextCursor: null }),
+      );
+      routes.set(path, (response) =>
+        json(response, { items: [message], nextCursor: 'old-history' }),
+      );
+      routes.set(`${path}?cursor=old-history`, (response) =>
+        json(response, { items: [older], nextCursor: null }),
+      );
+      const context = await signIn(runtime);
+      await until(
+        () =>
+          sockets.length === 1 &&
+          context.connectionState === 'Connected' &&
+          !context.chat.conversations.loading,
+      );
+      await context.chat.openConversation(conversation.id);
+      await Promise.all([
+        context.chat.loadConversations(true),
+        context.chat.loadMessages(true),
+      ]);
+      assert.equal(context.chat.messages.items.length, 2);
+      assert.equal(context.chat.conversations.items.length, 2);
+      const newest = {
+        ...message,
+        id: '555555555555555555555555',
+        createdAt: '2026-10-15T11:00:00.000Z',
+      };
+      routes.set(path, (response) =>
+        json(response, { items: [newest], nextCursor: 'new-history' }),
+      );
+      routes.set('/api/conversations', (response) =>
+        json(response, {
+          items: [{ ...conversation, lastMessage: newest }],
+          nextCursor: 'new-list',
+        }),
+      );
+      routes.set(`${path}?cursor=new-history`, (response) =>
+        json(response, { items: [message, newest], nextCursor: null }),
+      );
+      routes.set('/api/conversations?cursor=new-list', (response) =>
+        json(response, { items: [conversation, other], nextCursor: null }),
+      );
+      const before = requests.length;
+      if (trigger === 'reconnect') {
+        sockets[0].conn.close();
+      } else {
+        const original = Object.getOwnPropertyDescriptor(
+          globalThis,
+          'document',
+        );
+        t.after(() => {
+          if (original) Object.defineProperty(globalThis, 'document', original);
+          else delete globalThis.document;
+        });
+        const document = { visibilityState: 'hidden' };
+        Object.defineProperty(globalThis, 'document', {
+          configurable: true,
+          value: document,
+        });
+        runtime.visibilityChanged();
+        assert.equal(requests.length, before);
+        document.visibilityState = 'visible';
+        runtime.visibilityChanged();
+      }
+      await until(
+        () =>
+          context.chat.messages.nextCursor === 'new-history' &&
+          context.chat.conversations.nextCursor === 'new-list',
+      );
+      assert.deepEqual(context.chat.messages.items, [newest]);
+      assert.equal(context.chat.conversations.items.length, 1);
+      assert.equal(
+        context.chat.conversations.items[0].lastMessage.id,
+        newest.id,
+      );
+      assert.equal(
+        requests.slice(before).filter((url) => url === path).length,
+        1,
+      );
+      assert.equal(
+        requests.slice(before).filter((url) => url === '/api/conversations')
+          .length,
+        1,
+      );
+      assert.equal(
+        requests.slice(before).some((url) => url.includes('cursor=')),
+        false,
+      );
+      await Promise.all([
+        context.chat.loadConversations(true),
+        context.chat.loadMessages(true),
+      ]);
+      assert.deepEqual(context.chat.messages.items, [message, newest]);
+      assert.deepEqual(
+        context.chat.conversations.items.map((item) => item.id),
+        [conversation.id, other.id],
+      );
+      assert.equal(
+        context.chat.conversations.items[0].lastMessage.id,
+        newest.id,
+      );
+      assert.equal(context.chat.messages.nextCursor, null);
+      assert.equal(context.chat.conversations.nextCursor, null);
+      const live = { ...newest, id: '666666666666666666666666' };
+      const connected = sockets.at(-1);
+      connected.emit('message:created', live);
+      connected.emit('message:created', live);
+      await until(() => context.chat.messages.items.length === 3);
+      assert.deepEqual(context.chat.messages.items, [message, newest, live]);
+    });
+  }
 });

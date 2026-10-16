@@ -52,6 +52,10 @@
         messages={context.chat.messages}
         userId={auth.state.user.id}
         onSend={context.chat.sendMessage}
+        onOpen={context.chat.openConversation}
+        onLoadMessages={context.chat.loadMessages}
+        onLoadConversations={context.chat.loadConversations}
+        onConversationCreated={context.chat.conversationCreated}
         onLogout={runtime.session.logout}
       />{/key}
   </main>

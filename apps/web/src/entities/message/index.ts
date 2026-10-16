@@ -1,1 +1,5 @@
-export { createMessages, type MessageStore } from './messages.svelte';
+export {
+  createMessages,
+  type MessageStore,
+  type MessagesView,
+} from './messages.svelte';

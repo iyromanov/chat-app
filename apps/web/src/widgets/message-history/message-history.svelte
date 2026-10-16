@@ -1,9 +1,9 @@
 <script lang="ts">
   import { tick, untrack } from 'svelte';
   import { Alert, Button, Spinner } from 'flowbite-svelte';
-  import type { MessageStore } from '@entities/message';
+  import type { MessagesView } from '@entities/message';
   import { UserAvatar } from '@entities/user';
-  import type { Conversation } from '@chat/contracts/conversations';
+  import type { ConversationView } from '@entities/conversation';
   import { SendMessage } from '@features/send-message';
   import { Icon } from '@shared/ui';
   import { formatTime } from '@shared/lib';
@@ -11,13 +11,15 @@
     messages,
     conversation,
     onSend,
+    onLoad,
     userId,
     onBack,
     connectionState,
   }: {
-    messages: MessageStore;
-    conversation: Conversation;
+    messages: MessagesView;
+    conversation: ConversationView;
     onSend: (conversationId: string, text: string) => Promise<void>;
+    onLoad: (more?: boolean) => Promise<void>;
     userId: string;
     onBack: () => void;
     connectionState: string;
@@ -49,7 +51,7 @@
     const height = scroller.scrollHeight;
     const top = scroller.scrollTop;
     try {
-      await messages.load(true);
+      await onLoad(true);
       await tick();
       if (conversation.id === id)
         scroller.scrollTop = top + scroller.scrollHeight - height;
@@ -135,7 +137,7 @@
     {#if messages.error}<div class="mx-auto mb-4 max-w-md space-y-2">
         <Alert color="red" role="alert">{messages.error}</Alert><Button
           size="sm"
-          onclick={() => (messages.failedLoadMore ? older() : messages.load())}
+          onclick={() => (messages.failedLoadMore ? older() : onLoad())}
           >Try again</Button
         >
       </div>{/if}
