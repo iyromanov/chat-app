@@ -1,130 +1,127 @@
-# Чат
+# Chat
 
-Реализованы регистрация, вход, восстановление авторизации и выход с очисткой данных и отключением соединений текущего входа. Интерфейс на английском. Доступны поиск собеседников, личные диалоги и сохранённая текстовая переписка с доставкой во все вкладки участников.
+A local real-time chat application built with NestJS, SvelteKit, TypeScript and MongoDB. Register, find another user, start a private conversation and exchange persistent messages across browser tabs. The interface uses Flowbite Svelte and Tailwind CSS and is in English.
 
-## Минимальный запуск
+**Delivery status:** the chat is implemented. Video stories (recording, publication, playback, expiry cleanup and personal view tracking) are **not implemented**. Tickets 06–08 remain open, so ticket 09 and the complete agreed scope are not accepted. See the [acceptance record](docs/acceptance.md) for verification results and outstanding work.
 
-Нужны Docker Engine/Desktop с работающим Linux runtime и Docker Compose v2 (рекомендуется 4 ГБ памяти). Node.js на хосте для Compose не нужен.
+## Run locally with Docker Compose
+
+Prerequisites: Docker Engine or Docker Desktop with a running Linux container runtime and Docker Compose v2. Allocate approximately 4 GB of memory. Port 8080 must be free. Node.js is not needed on the host for this mode. The first build needs internet access to download images and npm packages; running the application requires no cloud services.
+
+From the repository root:
 
 ```sh
 cp .env.example .env
 docker compose up --build -d
 ```
 
-Откройте http://localhost:8080. Swagger UI: http://localhost:8080/api/docs. Web и API доступны с одного адреса; MongoDB наружу не публикуется.
+Open [http://localhost:8080](http://localhost:8080). [Swagger UI](http://localhost:8080/api/docs) documents the implemented HTTP API. Nginx routes `/api` and `/socket.io` to the API and everything else to the web server, including WebSocket upgrades. Only the proxy publishes a host port; MongoDB is internal. There are no video endpoints or video storage volumes yet.
 
-`docker compose restart` и `docker compose down` сохраняют пользователей в volume `mongo-data`. `docker compose down -v` удаляет данные. Первый запуск скачивает образы и зависимости. Проверка запуска: `docker compose ps`, логи: `docker compose logs api web proxy`.
+```sh
+docker compose ps
+docker compose logs api web proxy
+docker compose restart
+docker compose down
+```
 
-## Окружение
+The named `mongo-data` volume stores users, conversations and messages across `restart`, `down` and a subsequent `up`. Back up this volume before deleting or replacing it. **`docker compose down -v` deletes this project's persistent database.** Removing containers alone does not delete the volume.
 
-Пример — `.env.example`. Для Compose обязателен `JWT_SECRET` длиной минимум 32 символа; пример предназначен только для локальной разработки. API проверяет конфигурацию до запуска:
+A fresh database is the supported delivery baseline. Migration from the earlier implementation with `attemptId` is excluded: the API does not remove its obsolete unique index automatically. An old development volume may reject ordinary sends; use a separate Compose project and fresh volume for evaluation rather than deleting data you need.
 
-| Параметр        | Назначение                                                   |
-| --------------- | ------------------------------------------------------------ |
-| `MONGODB_URI`   | Обязательный адрес MongoDB; Compose задаёт его автоматически |
-| `JWT_SECRET`    | Обязательный секрет подписи JWT, минимум 32 символа          |
-| `PORT`          | Порт API, по умолчанию 3001                                  |
-| `COOKIE_SECURE` | `false` для локального HTTP, `true` для HTTPS                |
+## Configuration
 
-JWT выдаётся на 24 часа в постоянной HttpOnly cookie с SameSite=Lax, без продления и серверного отзыва. Пароль хешируется scrypt со случайной солью. Email и username уникальны без учёта регистра; отображаемый username сохраняет регистр.
+Copy [.env.example](.env.example) to `.env`. The checked-in JWT secret is a public local-development example; replace it for any shared deployment. Keep real secrets in the ignored `.env` file.
 
-## Разработка и проверки
+| Variable           | Required / default                    | Purpose                                                                                           |
+| ------------------ | ------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `JWT_SECRET`       | Required, at least 32 characters      | JWT signing key; Compose reads it from `.env`                                                     |
+| `MONGODB_URI`      | Required for host development         | MongoDB connection URL; Compose sets `mongodb://mongo:27017/chat` automatically                   |
+| `PORT`             | API default: `3001`                   | API listening port; Compose fixes it at 3001                                                      |
+| `COOKIE_SECURE`    | Default: `false`                      | Use `false` for local HTTP; use `true` with HTTPS; Compose fixes it to `false`                    |
+| `API_PROXY_TARGET` | Vite default: `http://localhost:3001` | Optional developer proxy target; export it in the shell when starting Vite                        |
+| `ORIGIN`           | Compose: `http://localhost:8080`      | Production web origin; change together with proxy port/address if using a custom Compose override |
 
-Нужны Node.js 24 и pnpm 10.33.4 (`corepack enable`), а для MongoDB и HTTP-тестов — работающий Docker. Все команды ниже выполняются из корня.
+The API validates configuration before starting. Changing `.env` does not change an already running container: recreate it with `docker compose up -d`. Rotating `JWT_SECRET` invalidates existing tokens. These Compose defaults are intended for local evaluation over HTTP.
+
+## Developer mode
+
+Prerequisites: Node.js 24, pnpm 10.33.4 (`corepack enable`), and Docker for MongoDB and the integration tests. Run commands from the repository root. Keep ports 5173 and 3001 free. The example below uses host MongoDB port 27018 to avoid a common local port conflict:
 
 ```sh
 pnpm install --frozen-lockfile
 cp .env.example .env
-docker run --rm -d --name chat-dev-mongo -p 27017:27017 mongo:8
+docker run -d --name chat-dev-mongo -p 127.0.0.1:27018:27017 -v chat-dev-mongo-data:/data/db mongo:8
+```
+
+Set `MONGODB_URI=mongodb://localhost:27018/chat` in `.env`, then:
+
+```sh
 pnpm dev
 ```
 
-Откройте http://localhost:5173. Vite проксирует `/api` на localhost:3001; `API_PROXY_TARGET` позволяет заменить адрес API. `.env` читает API, web не получает JWT secret. Остановить MongoDB: `docker stop chat-dev-mongo` (этот временный контейнер используется только для разработки; постоянные данные обеспечивает Compose).
+Open [http://localhost:5173](http://localhost:5173). Vite proxies `/api` and `/socket.io` to the API. The API reads the root `.env`; web does not receive the signing secret. Stop the processes with Ctrl+C, stop MongoDB with `docker stop chat-dev-mongo`, and resume it with `docker start chat-dev-mongo`. The developer database volume is separate from Compose and Testcontainers.
+
+## Generate, check and test
 
 ```sh
-pnpm generate       # экспорт OpenAPI без MongoDB и генерация HTTP-клиента
-pnpm check          # TS, Svelte, ESLint/FSD, форматирование, актуальность генерации
-pnpm test           # Jest HTTP-тесты с настоящей MongoDB через Testcontainers
-pnpm build          # сборка обоих приложений
+pnpm generate       # Export OpenAPI without MongoDB; generate HTTP types and Fetch client
+pnpm check          # TypeScript, Svelte, ESLint/FSD, Prettier and generated-artifact freshness
+pnpm test           # All Jest HTTP/Socket.io integration tests and client runtime tests
+pnpm build          # Build contracts, API and production web
 ```
 
-Testcontainers автоматически создаёт и удаляет отдельную MongoDB. Docker должен быть доступен текущему пользователю; на Docker Desktop при ошибке обнаружения runtime можно указать `DOCKER_HOST=unix://$HOME/.docker/run/docker.sock`. Тесты проверяют регистрацию, публичный ответ, cookie, валидацию, уникальность (в том числе конкурентную), восстановление пользователя, отказ без токена и истечение JWT с заменяемым временем.
+Do not edit `apps/api/openapi.json` or `apps/web/src/shared/api/generated.ts` manually. Update Zod contracts and API descriptions, then run `pnpm generate` and commit both artifacts. `swagger-typescript-api` creates methods from OpenAPI operation IDs; application code calls the configured shared client, for example `api.auth.me()`.
 
-Ручная проверка: открыть приложение без cookie; увидеть проверку авторизации и форму; отправить неверные данные, затем корректные; проверить приватную область, обновить страницу, закрыть и открыть браузер; попробовать занятый email/username с другим регистром в независимой сессии. На ширине 375 px проверить поля, ошибки и кнопку. После `docker compose restart` убедиться, что cookie по-прежнему открывает того же пользователя. Приватный endpoint: `GET /api/auth/me`, регистрация: `POST /api/auth/register`.
+`pnpm check` also checks FSD import directions and slice public interfaces, and prevents the contracts package from importing application frameworks. Testcontainers creates and removes an isolated real MongoDB container for each backend suite; tests do not use the application database. Docker must be accessible to the current user. On Docker Desktop, if runtime discovery fails, try:
 
-## Структура
+```sh
+DOCKER_HOST="unix://$HOME/.docker/run/docker.sock" pnpm test
+```
 
-- `apps/api`: NestJS; модули auth/users, схемы Mongoose, единые ошибки и заменяемые часы.
-- `apps/web`: SvelteKit; маршруты, AuthStore, SessionController и композиция авторизованного контекста в app, экраны в pages, формы в features, HTTP-клиент в shared; готовые UI-компоненты импортируются из `flowbite-svelte`.
-- `packages/contracts`: Zod-контракты без зависимости от фреймворков.
+For a targeted backend check after dependencies are built:
 
-`apps/api/openapi.json`, `apps/web/src/shared/api/generated.ts` генерируются командой `pnpm generate`; не редактируйте их вручную. Типы и Fetch-клиент создаёт `swagger-typescript-api`. Прикладной код вызывает методы по `operationId` (например, `api.auth.me()`); маршруты и HTTP-методы задаёт OpenAPI. ESLint проверяет направления импортов FSD и публичные интерфейсы срезов, а также изоляцию contracts. Пользовательское состояние создаётся для экземпляра страницы; сервер не рендерит приватные данные.
+```sh
+pnpm --filter @chat/api test --runTestsByPath test/messages.spec.ts
+pnpm --filter @chat/web test
+```
 
-Аутентификация API использует `@nestjs/passport`: `passport-local` для `POST /api/auth/login` (email и пароль) и `passport-jwt` для проверки `chat_token` в HttpOnly cookie. JWT выпускается через `@nestjs/jwt`; подпись, issuer, audience и срок проверяются Passport с заменяемыми часами. Хеширование и проверка паролей используют `scrypt-kdf`. Вход возвращает тот же публичный профиль, что регистрация; неверные данные дают 401, невалидное тело — 400.
+Backend coverage includes validation, case-insensitive and concurrent uniqueness, participant privacy, pagination, HTTP/Socket.io delivery, persistence across API restarts, logout and JWT expiry with controlled time. Client runtime tests exercise HTTP/Socket.io ordering, refresh, failures, stale responses and login isolation. They do not replace browser acceptance or camera testing. No stories tests exist yet.
 
-## Вход, выход и срок JWT
+## Demonstrate with two users
 
-`POST /api/auth/logout` очищает cookie и отключает Socket.io-соединения текущего входа. Все приватные HTTP-операции защищены глобальным Passport guard; регистрация и вход явно публичные. Каждая авторизация получает уникальный `jti`, даже при двух входах одного пользователя в одну секунду. После восстановления авторизации app создаёт одно Socket.io-соединение на вкладку. Handshake использует ту же Passport JWT-стратегию; существующие соединения закрываются при истечении JWT. Vite и Compose проксируют `/socket.io` на API.
+Use two independent browser profiles or one regular and one incognito window. Tabs in one profile share cookies, so they cannot hold two independent users on the same origin. Open an extra tab in each profile to check delivery across tabs.
 
-SessionController выполняет `/me`, login/register/logout и завершает вход по актуальному HTTP 401 или `auth:ended`. AuthStore хранит только реактивное состояние и синхронные переходы; формы получают actions через props и сохраняют поля, loading и ошибки локально. Начальная ошибка сети/5xx показывает повтор проверки; 401 показывает вход. Login/register используют профиль из своего ответа без дополнительного `/me`. Ошибка серверного logout отображается и сохраняет вход; 401 означает, что вход уже недействителен.
+1. Register Alice and Bob with distinct emails and usernames (3–30 Latin letters, digits or underscores), and passwords of 8–128 characters. Registration signs in immediately. Reload and check that the login persists. Try an existing email/username with different letter case and incorrect login credentials to see errors.
+2. Search for part of the other username with mixed case. Clear the query to browse other users; search for an unknown name to see “No users found”. Other users' emails are private. Click “Start conversation”: both participants see one conversation with “No messages”. Starting again from either side opens the same conversation.
+3. Send in both directions, including line breaks (Shift+Enter). Enter sends. All participant tabs receive the saved message. Whitespace-only messages cannot be sent; text over 2000 characters after trimming shows an error. A pending request disables the composer. Success clears the submitted text; failure preserves it with an error.
+4. Create more than 50 messages. Reload and reopen the conversation: the latest 50 are ordered oldest first. “Load older messages” adds earlier history without duplicate rows. Sending updates the conversation preview and activity order. Sign out and back in to check saved history.
+5. With more than 50 other users or conversations, scroll their respective lists to load the next page. “Load more” also works with the keyboard. Change a search while it loads to check that older results do not replace the current query.
+6. Disconnect Bob's tab with DevTools Network → Offline, send messages from Alice, then restore the network. Check “Disconnected — reconnecting…” and “Connected”, the current preview and the latest 50 messages. Older missed messages remain available through pagination. Returning to a visible tab performs the same refresh and resets previously loaded ranges.
+7. To inspect a lost response, use DevTools request interception or a debugging proxy to forward a message POST to the server but drop its response. Let Socket.io deliver the saved message. The form keeps its text and reports a request error. Submitting again is a new send and may save a second message with the same text. There is no automatic resend queue or special Retry operation.
+8. Sign out from one connected tab. Other connected tabs of that login return to Sign in and clear private data; an independent login stays active. A disconnected tab discovers logout on its next server interaction. JWTs expire after 24 hours; real server expiry is verified by controlled-time integration tests rather than a 24-hour manual wait.
+9. At 375 CSS pixels, check registration/login errors, search, Back navigation, long messages and sending. Below 768 pixels the list, search and conversation are separate views; desktop shows a sidebar. Older history keeps its scroll position; “New messages” returns to the bottom when reading above it.
+10. Run `docker compose restart`, reload and reopen the conversation. Users and history must remain. Repeat with `docker compose down` followed by `docker compose up -d` to check volume persistence.
 
-Каждый успешный вход создаёт собственные HTTP-клиент, chat/stores и socket. Перепроверка и reconnect сохраняют этот контекст. Завершение входа и dispose очищают данные, отключают соединение и делают старые операции неактуальными; поздний ответ или 401 прежнего контекста не влияет на новый вход. Повторный запуск корня не добавляет запросы восстановления, соединения или обработчики. При ошибке подключения socket выполняется `/me`; сетевой сбой сохраняет вход.
+Use a third independent user to confirm they do not receive participant events and cannot read or send to the conversation. Swagger UI can exercise protected HTTP operations using the current origin's login cookie.
 
-Подключённые вкладки текущего входа очищают состояние по серверному `auth:ended`. Отдельной localStorage-рассылки и клиентского таймера JWT нет: отключённая вкладка может узнать о завершении входа при следующем запросе/проверке/подключении. Независимый вход другого браузера остаётся активным. **Выход не отзывает JWT**: скопированный токен продолжает давать HTTP-доступ и позволяет новое Socket.io-подключение до истечения 24 часов. Комнаты Socket.io отслеживают только текущие соединения и не являются серверными сессиями или списком отозванных токенов.
+## Architecture and behavior
 
-Jest проверяет HTTP-вход и ошибки, persistent cookie, приватный доступ, подпись/claims, handshake, отключение двух вкладок текущего входа, независимый одновременный вход, повторное использование копии JWT и истечение HTTP/существующего Socket.io-соединения с управляемым временем и реальной MongoDB. Клиентские HTTP/Socket.io-проверки покрывают композицию авторизации, ошибки и повтор `/me`, login/register без дополнительной проверки, неуспешный logout, устаревшие ответы, изоляцию экземпляров, повторный запуск и dispose. Ручная проверка: войти, обновить страницу, открыть вторую вкладку; войти тем же пользователем в независимом профиле браузера; выйти из первой вкладки и убедиться, что обе подключённые вкладки показывают вход, а независимый профиль остаётся в приватной области. Повторить с отключённой второй вкладкой: после восстановления связи она узнаёт об окончании входа через сервер. Закрыть и снова открыть браузер, проверить сохранение входа до срока cookie.
+- `apps/api`: NestJS auth, users, conversations, messages and realtime modules; Mongoose schemas belong to their modules. Controllers and the gateway delegate to application services. Passwords use `scrypt-kdf` with random salts. Email and username uniqueness is protected by case-insensitive normalized unique indexes.
+- `apps/web`: SvelteKit with FSD layers and Svelte 5 rune stores. `createApplication` composes `SessionController`, `ChatController`, per-login stores and one Socket.io connection per tab. Stores contain reactive data and synchronous mutations; controllers perform asynchronous work. Components receive readonly state and actions through props. Search and composer state remain local to UI.
+- `packages/contracts`: framework-independent Zod schemas for validation, public data and Socket.io events. HTTP types/client are generated from OpenAPI.
 
-Successful registration, login and restoration responses still include the documented `X-Auth-Expires-At` header with the original JWT deadline. The client does not use it to schedule expiry. The backend validates JWT lifetime and disconnects expired sockets; restoring authentication does not extend the token lifetime.
+Each successful login owns a separate client context. Logout/disposal invalidates its pending chat operations; late responses cannot populate another login. Search results are scoped to the current query. An already started conversation creation can complete after the search closes or changes. When it completes, it opens the created conversation even if the user selected another conversation in the meantime.
 
-### Find users and start a conversation
+Messages are MongoDB's source of truth. Each POST creates an ordinary message; REST responses and live events merge by server Message ID. The last-message preview is derived through an indexed Message lookup, rather than duplicated in Conversation. Reconnection and returning to the tab replace the conversation list with its first page and active history with its latest 50, reset cursors and merge events arriving during loading. Other pages remain available through pagination. Failed background refreshes preserve displayed data and offer “Try again”.
 
-ChatController performs user search and conversation creation through the existing API. Search query, results, cursor, loading and error belong to each page's local UI model; changing the query or destroying the page invalidates older search responses. Starting a conversation applies its server response to the list and opens history through the same action used for chat selection. A newer selection supersedes a pending start. Removing its search result (including when search closes) cancels that start’s pending history selection and navigation. The page receives data and actions through props; it does not receive an HTTP client or coordinate domain stores. Logout retires the controller, so late search or creation responses cannot enter the next login.
+Authentication uses Passport local/JWT strategies, JWT issuer/audience/signature checks, and a persistent HttpOnly `chat_token` cookie with `SameSite=Lax`. Tokens last 24 hours with no refresh. The API checks expiry and disconnects expired sockets. The documented `X-Auth-Expires-At` response header does not renew the token or schedule a client timer.
 
-1. Register two users in independent browser sessions (for example Chrome and an incognito window). Keep an additional tab open for each participant, and optionally a third user in another session.
-2. Search by part of the other user's username, mixing uppercase and lowercase. Clear the search to list everyone else; search for an unknown name to see “No users found”. Other users' email addresses are never shown.
-3. Click “Start conversation”. Both participants' tabs immediately show the same conversation with the other username and “No messages”. Click again, or start from the other participant, to reopen the same conversation. The third user receives nothing.
-4. Reload or sign out and in: the empty conversation persists. Below 768 CSS pixels, chats, user search and the selected conversation occupy separate full-screen views. Back returns to the originating list or search with its position and query preserved.
-5. With more than 50 other users or conversations, scroll down to load the next page automatically. “Load more” also supports keyboard activation. Change the search during loading and confirm only results for the latest search remain.
+## Limitations and remaining delivery work
 
-HTTP/Socket.io integration coverage runs against Testcontainers MongoDB via `pnpm test`; it covers search, 50-item pages, invalid and query-bound cursors, tied conversation timestamps, repeated/concurrent starts, participant lists, and event delivery to all participant tabs. Client composition checks also cover search pagination and retries, superseded responses, disposed search UI, login isolation, start/open actions, overlapping selections, creation during list refresh and subsequent message exchange. Browser acceptance remains a separate manual check.
+- **Stateless JWT:** logout clears the cookie and disconnects current-login sockets but does not revoke a copied token. That token can still make HTTP requests and open a new Socket.io connection until expiry. There is no server session collection or token denylist. No localStorage logout broadcast or client JWT expiry timer is used.
+- **Event delivery:** a crash between saving a message and broadcasting its event can delay display until the next load, reconnect or return to the tab. There is no transactional outbox, durable event queue or guarantee of immediate delivery after such a crash. Lost POST responses can lead to a second saved message on resubmission.
+- **Browser support:** evaluation targets desktop Chrome/Chromium and narrow viewports. Other browsers and real mobile devices have not been accepted. Browser verification details are in the acceptance record.
+- **Stories:** tickets [06](.scratch/chat-app/issues/06-record-and-publish-story.md), [07](.scratch/chat-app/issues/07-story-feed-playback-and-expiration.md) and [08](.scratch/chat-app/issues/08-personal-story-view-state.md) remain unimplemented. Their agreed behavior is camera recording up to 15 seconds, a 25 MB publication limit, private playback for 24 hours, persistent personal views and physical cleanup. The planned feed refreshes on opening, returning to the tab and own publication; another author's story would appear on the next such refresh. There is no implemented feed, video persistence, cleanup, polling or stories Socket.io notification. MinIO, transcoding and public video hosting are excluded.
+- **Publication:** no Git remote is configured for this checkout as of the acceptance record. Create a GitHub repository, configure its real remote and push the reviewed branch before claiming external publication. No repository URL is invented here.
 
-### Send messages and read saved history
-
-1. Open a conversation in two independent sessions, with an extra tab for each participant. Send text with internal line breaks; all participant tabs receive the same saved message without reloading. A third user cannot read or send into this conversation.
-2. The composer rejects whitespace-only text and more than 2000 characters after trimming. Submit the boundary of 2000 characters, and check clear validation errors. The form disables sending while the POST is pending, clears the submitted text on success, and preserves it with an error on failure. Every new submission is an ordinary new request.
-3. Send more than 50 messages. Reload and open the conversation: the latest 50 appear oldest first. Click “Load more” to add older messages, checking the boundary for omissions and duplicates. Sign out and back in to verify persistence.
-4. Send into an older conversation. Its preview and timestamp update, and it moves to the top in both participants' tabs. Reopening a conversation preserves its last-message preview. Check at 375 px that long words, line breaks, errors and controls remain usable.
-
-`POST /api/conversations/{conversationId}/messages` accepts only `text`; repeated or concurrent requests can save separate messages with the same text. New documents and public HTTP/WS messages have no `attemptId`. At API startup, the messages module drops the obsolete `conversationId_1_senderId_1_attemptId_1` index if present, preserving existing documents and the history index. Startup fails on unexpected migration errors, preventing sends under the obsolete constraint. Existing messages remain readable; their legacy field is omitted from public history and conversation previews. `GET` on the same route returns 50 messages with a scoped `nextCursor` for older history. The `message:created` Socket.io event carries the same public message as HTTP, after saving. ChatController applies the HTTP response and live events through one operation, updating active history and conversation previews by server Message ID. Unknown conversations trigger a list synchronization through the controller. Latest conversation activity is derived from an indexed Message lookup, without storing a message copy in Conversation or using a multi-document transaction.
-
-The message HTTP/Socket.io tests cover trimming, line breaks, length boundaries, persistence after login, participant access, ordinary concurrent sends, existing-index migration and legacy history, tied timestamp pagination and cursor scope, activity ordering, and delivery to every participant tab while excluding outsiders. Recovery tests also cover 105 missed messages across three history pages, authenticated reconnect and a second saved message on repeated submission. Browser acceptance is tracked separately in the tickets.
-
-### Chat layout and navigation
-
-The authenticated interface fills the viewport. At 768 CSS pixels and above, a permanent 320 px sidebar sits beside the conversation; smaller viewports show one screen at a time. Chat lists, search results and messages scroll independently. Avatars are circles containing the first two Unicode code points of the username, preserving its case (one character for a one-character username).
-
-Focus the desktop search to browse users, including with an empty query; Escape or Close search returns to chats. On mobile, use the search icon, Back and the compact menu for Sign out. Opening a conversation from search preserves the query and results for the return journey.
-
-Enter sends a message; Shift+Enter inserts a newline. Text, sending and error state belong to the mounted conversation form. Switching conversations starts a new form; late results cannot clear its text. Opening a conversation shows the latest messages; incoming messages follow the bottom only when already there. While reading older messages, use New messages to return to the bottom. Loading older history preserves the visible position. The composer resizes with the visual viewport and grows up to a bounded height.
-
-The first redesign is light-only and uses the existing blue palette. Stories remain a separate planned feature; their visual requirements are recorded in [.scratch/chat-ui-redesign/spec.md](.scratch/chat-ui-redesign/spec.md).
-
-### Connection recovery and send errors
-
-The sidebar and conversation header show “Connecting…”, “Connected” or “Disconnected — reconnecting…”. Each authenticated tab owns one Socket.io connection. Initial loading, authenticated reconnection and returning to a visible tab refresh conversations and open history through REST. A disconnected socket does not enqueue new sends: a user-triggered HTTP send either succeeds or shows an error while preserving the text. WS/history can show a saved message even when its HTTP response was lost; they do not turn that failed request into a successful form submission.
-
-`GET /api/conversations/{conversationId}/messages` loads the latest 50 messages, with `cursor=nextCursor` for older pages. Cursors are bound to the viewer and conversation. Reconnection and returning to a visible tab replace the active history with its latest page and the conversation list with its first page, resetting both cursors. Older history remains available with “Load older messages”; other conversations remain available through infinite scroll. There is no automatic traversal of missed pages or restoration of the previously loaded range. Live events received during a request merge by server ID, and stale REST previews cannot replace newer activity. A failed refresh keeps the displayed data and login and offers a retry.
-
-ChatController owns selection actions, HTTP loading, pagination, refresh and HTTP/WS message coordination. Independent Svelte 5 rune stores hold only reactive data and synchronous mutations; components receive readonly data and actions through props. Selection stays local to the page, so an open conversation remains visible even when it falls outside the refreshed list. Search and conversation creation are migrated separately in ticket 04.
-
-MongoDB remains the source of truth. A server failure between saving a message and broadcasting its event can delay display until the next initial load, reconnection or return to the tab. There is no durable event queue or transactional outbox, and no promise of immediate delivery after such a failure. If a POST response is lost after saving, submitting the text again can create a second message. There is no special Retry, automatic resend or deduplication by text/time; only repeated representations of the same server Message ID are merged.
-
-Manual scenarios:
-
-1. Open both participant sessions and an extra tab. Disconnect the recipient network, send more than 100 messages from the sender, reconnect and check only the latest 50 messages, the latest conversation preview and the connection indicator. Use Load older messages to reach the remaining messages. Return to a background tab and check the same synchronization.
-2. Block Socket.io or disconnect the network before sending. Check that no automatic send queue starts. Check that a failed send keeps its text and shows an error; submitting again starts a new request.
-3. Drop the HTTP send response after the server accepts it (for example with a debugging proxy); allow the corresponding event and check that the saved message appears while the form still shows the HTTP error and preserves its text. Submit again and verify two saved messages.
-4. Delay the initial messages/conversations request, send from another session while it is pending, then release it. Repeat during reconnect refresh and at a 50-item boundary. Check that events received during loading survive without duplicate rows or stale previews. Load older history and more than 50 conversations, refresh, and check that old ranges disappear and pagination uses the new cursors. Keep an older conversation open and check that its header and history remain available when it leaves the first list page.
-5. With sockets connected, sign out from another tab while a recovery response is delayed; release it and confirm that private data stays cleared and no subsequent recovery page starts. Repeat when the server reports JWT expiry and after signing in again. A disconnected tab learns about logout on its next server interaction. Inspect connections to verify at most one per tab and that the previous login never resumes.
-
-`pnpm test` combines real MongoDB Testcontainers HTTP/Socket.io tests with client runtime HTTP/Socket.io fixtures for load/event races, first-page refresh and cursor resets, pagination after refresh, refresh errors and retries, late commits in the latest page, HTTP/WS send ordering, response loss, unknown conversations, late response isolation, logout and server-driven authorization loss. Fixtures do not replace the database persistence and uniqueness checks or the manual browser scenarios above.
+The [specification](.scratch/chat-app/spec.md), [glossary](GLOSSARY.md), [ADRs](docs/adr) and [local tickets](.scratch/chat-app/issues) record scope and decisions. The later client simplifications in ADRs 0008–0011 supersede historical promises of idempotent sends, automatic recovery of every missed page, client JWT timers and old-index migration. Historical ticket comments describe their original verification; the acceptance record describes the current delivery.

@@ -21,7 +21,7 @@
 - [x] Истечение JWT прекращает доступ HTTP и уже существующего Socket.io-соединения, а не только запрещает новое подключение. Клиент прекращает приватные действия и показывает вход.
 - [x] Авторизацией и жизненным циклом соединения владеет app. Shared сообщает об ошибке авторизации через интерфейс клиента без импорта auth-store; stores и соединения не разделяются между пользователями на сервере.
 - [x] Контракты, OpenAPI и сгенерированные типы обновлены. Jest-проверки через HTTP и Socket.io покрывают успешный/неуспешный вход, handshake, выход, независимость другого входа, действительность копии JWT после выхода и истечение с управляемым временем.
-- [ ] Вручную проверены восстановление входа, приватный маршрут, очистка состояния нескольких вкладок и сохранение независимого входа в другом браузере.
+- [x] Вручную проверены восстановление входа, приватный маршрут, очистка состояния нескольких вкладок и сохранение независимого входа в другом браузере.
 
 
 ## Comments
@@ -51,3 +51,8 @@
 - В [новой спецификации](../../ui-state-architecture/spec.md) и [ADR 0009](../../../docs/adr/0009-server-driven-client-auth.md) согласован отказ от клиентского таймера JWT и отдельной localStorage-рассылки logout. UI реагирует на ответы/события сервера; отключённые вкладки могут узнать о завершении входа при следующем обращении к серверу.
 - 2026-10-16: это упрощение реализовано в [задаче 01](../../ui-state-architecture/issues/01-simple-session-lifecycle.md). AuthStore отделён от SessionController; формы используют actions, ошибки `/me` и logout сохраняют корректное состояние, старые ответы не влияют на новый вход. Прежние комментарии о таймере и localStorage описывают историческую реализацию.
 - Это изменение целевых требований, а не выполненная реализация. Прежние проверки выше описывают текущее поведение; серверная проверка JWT и отключение истёкших сокетов сохраняются.
+
+### 2026-10-16 — current browser acceptance
+
+- Ticket 09 acceptance on fresh Compose verified restoration after reload, anonymous access, logout clearing two connected tabs and a separate login staying active. A disconnected tab returned to Sign in after reconnecting.
+- A signed 15-second fixture JWT restored the user and socket; server expiry led to Sign in and HTTP 401 while the fixture cookie remained present. Normal 24-hour token issuance was unchanged. Full browser shutdown/reopen was not repeated. See the [acceptance record](../../../docs/acceptance.md) for details and remaining delivery work.
