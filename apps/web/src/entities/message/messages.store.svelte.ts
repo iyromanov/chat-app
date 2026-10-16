@@ -1,6 +1,6 @@
 import type { Message } from '@chat/contracts/messages';
 
-export type MessagesView = {
+export type MessagesState = {
   readonly conversationId: string | null;
   readonly items: readonly Readonly<Message>[];
   readonly nextCursor: string | null;
@@ -9,7 +9,7 @@ export type MessagesView = {
   readonly failedLoadMore: boolean;
 };
 
-class Messages implements MessagesView {
+export class MessagesStore implements MessagesState {
   private currentConversationId = $state<string | null>(null);
   private currentItems = $state.raw<Message[]>([]);
   private cursor = $state<string | null>(null);
@@ -21,7 +21,7 @@ class Messages implements MessagesView {
     return this.currentConversationId;
   }
 
-  get items(): MessagesView['items'] {
+  get items(): MessagesState['items'] {
     return this.currentItems;
   }
 
@@ -97,10 +97,4 @@ class Messages implements MessagesView {
 
 function compareMessages(a: Message, b: Message) {
   return a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id);
-}
-
-export type MessageStore = Messages;
-
-export function createMessages(): MessageStore {
-  return new Messages();
 }

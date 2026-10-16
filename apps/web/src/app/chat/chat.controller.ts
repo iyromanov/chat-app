@@ -8,10 +8,10 @@ import {
   type Message,
 } from '@chat/contracts/messages';
 import type {
-  ConversationStore,
-  ConversationsView,
+  ConversationsStore,
+  ConversationsState,
 } from '@entities/conversation';
-import type { MessageStore, MessagesView } from '@entities/message';
+import type { MessagesStore, MessagesState } from '@entities/message';
 import type { UsersPage } from '@chat/contracts/users';
 import type { ApiClient } from '@shared/api';
 
@@ -24,13 +24,13 @@ export class ChatController {
   private conversationEvents = new Set<string>();
   private unknownMessages = new Map<string, Message>();
 
-  readonly conversations: ConversationsView;
-  readonly messages: MessagesView;
+  readonly conversations: ConversationsState;
+  readonly messages: MessagesState;
 
   constructor(
     private readonly api: ApiClient,
-    private readonly conversationsStore: ConversationStore,
-    private readonly messagesStore: MessageStore,
+    private readonly conversationsStore: ConversationsStore,
+    private readonly messagesStore: MessagesStore,
   ) {
     this.conversations = conversationsStore;
     this.messages = messagesStore;

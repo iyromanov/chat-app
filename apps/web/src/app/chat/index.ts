@@ -1,1 +1,1 @@
-export { ChatController } from './chat';
+export { ChatController } from './chat.controller';

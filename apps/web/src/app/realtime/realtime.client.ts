@@ -1,7 +1,7 @@
 import { io, type Socket } from 'socket.io-client';
 import type { ServerEvents } from '@chat/contracts/realtime';
 
-type RealtimeHandlers = {
+type RealtimeClientHandlers = {
   connected: () => void;
   disconnected: () => void;
   connectionFailed: () => void;
@@ -10,9 +10,9 @@ type RealtimeHandlers = {
   messageCreated: (data: unknown) => void;
 };
 
-export function createRealtime(
+export function createRealtimeClient(
   url: string | undefined,
-  handlers: RealtimeHandlers,
+  handlers: RealtimeClientHandlers,
 ) {
   const socket: Socket<ServerEvents> = io(url, {
     withCredentials: true,

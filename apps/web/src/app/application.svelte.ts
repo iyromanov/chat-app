@@ -1,10 +1,10 @@
 import type { CurrentUser } from '@chat/contracts/users';
 import { createApi } from '@shared/api';
-import { AuthStore, SessionController, type AuthView } from '../auth';
-import { ChatController } from '../chat';
-import { createConversations } from '@entities/conversation';
-import { createMessages } from '@entities/message';
-import { createRealtime } from '../realtime';
+import { AuthStore, SessionController, type AuthState } from './auth';
+import { ChatController } from './chat';
+import { ConversationsStore } from '@entities/conversation';
+import { MessagesStore } from '@entities/message';
+import { createRealtimeClient } from './realtime';
 
 type AuthenticatedContext = {
   api: ReturnType<typeof createApi>;
@@ -13,7 +13,7 @@ type AuthenticatedContext = {
   dispose: () => void;
 };
 
-export function createAppRuntime(
+export function createApplication(
   options: { baseUrl?: string; fetch?: typeof fetch } = {},
 ) {
   let generation = 0;
@@ -22,12 +22,7 @@ export function createAppRuntime(
   let context = $state.raw<AuthenticatedContext | null>(null);
   const auth = new AuthStore();
   const publicApi = createApi({ ...options, onUnauthorized: () => {} });
-  const session = new SessionController(
-    auth,
-    publicApi.auth,
-    () => context?.api.auth,
-    userChanged,
-  );
+  const session = new SessionController(auth, publicApi.auth, userChanged);
 
   function userChanged(user: CurrentUser | null) {
     generation++;
@@ -48,11 +43,11 @@ export function createAppRuntime(
 
     const chat = new ChatController(
       api,
-      createConversations(),
-      createMessages(),
+      new ConversationsStore(),
+      new MessagesStore(),
     );
     let connectionState = $state('Connecting…');
-    const realtime = createRealtime(options.baseUrl, {
+    const realtimeClient = createRealtimeClient(options.baseUrl, {
       connected: () => {
         connectionState = 'Connected';
         chat.refresh();
@@ -77,16 +72,16 @@ export function createAppRuntime(
         return connectionState;
       },
       dispose() {
-        realtime.dispose();
+        realtimeClient.dispose();
         chat.dispose();
       },
     };
     chat.refresh();
-    realtime.connect();
+    realtimeClient.connect();
   }
 
   return {
-    auth: auth as AuthView,
+    auth: auth as AuthState,
     session,
     get context() {
       return context;
@@ -98,7 +93,10 @@ export function createAppRuntime(
     },
     start() {
       if (disposed) return Promise.resolve();
-      return (started ??= session.restore());
+      if (!started) {
+        started = session.restore();
+      }
+      return started;
     },
     dispose() {
       if (disposed) return;

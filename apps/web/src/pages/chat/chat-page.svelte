@@ -5,11 +5,11 @@
   import type { UsersPage } from '@chat/contracts/users';
   import { Icon, InfiniteScroll } from '@shared/ui';
   import { MessageHistory } from '@widgets/message-history';
-  import type { MessagesView } from '@entities/message';
+  import type { MessagesState } from '@entities/message';
   import { ConversationsWidget } from '@widgets/conversations';
   import type {
-    ConversationsView,
-    ConversationView,
+    ConversationsState,
+    ReadonlyConversation,
   } from '@entities/conversation';
   import { createUserSearch } from '@features/find-users';
   import { StartConversation } from '@features/start-conversation';
@@ -26,8 +26,8 @@
     onLogout,
     connectionState,
   }: {
-    conversations: ConversationsView;
-    messages: MessagesView;
+    conversations: ConversationsState;
+    messages: MessagesState;
     userId: string;
     onSend: (conversationId: string, text: string) => Promise<void>;
     onOpen: (conversationId: string) => Promise<void>;
@@ -42,7 +42,7 @@
     connectionState: string;
   } = $props();
   const users = createUserSearch((search, cursor) => onSearch(search, cursor));
-  let selectedConversation = $state.raw<ConversationView | null>(null);
+  let selectedConversation = $state.raw<ReadonlyConversation | null>(null);
   let selectedId = $derived(selectedConversation?.id ?? null);
   let selected = $derived(
     conversations.items.find((item) => item.id === selectedId) ??

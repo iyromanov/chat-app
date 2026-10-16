@@ -5,22 +5,22 @@
   import { LoginPage } from '@pages/login';
   import { RegisterPage } from '@pages/register';
   import { Alert, Button, P, Spinner } from 'flowbite-svelte';
-  import { createAppRuntime } from '../runtime';
-  const runtime = createAppRuntime();
-  const auth = runtime.auth;
+  import { createApplication } from '../application.svelte';
+  const app = createApplication();
+  const auth = app.auth;
   let registering = $state(false);
   async function register(input: Registration) {
-    await runtime.session.register(input);
+    await app.session.register(input);
     registering = false;
   }
 
   onMount(() => {
-    runtime.start();
-    return runtime.dispose;
+    app.start();
+    return app.dispose;
   });
 </script>
 
-<svelte:document onvisibilitychange={runtime.visibilityChanged} />
+<svelte:document onvisibilitychange={app.visibilityChanged} />
 
 <svelte:head
   ><title>Chat</title><meta
@@ -39,11 +39,11 @@
   <main class="grid min-h-dvh place-items-center p-6">
     <div class="flex w-full max-w-md flex-col gap-4">
       <Alert color="red" role="alert">{auth.state.error}</Alert>
-      <Button onclick={runtime.session.restore}>Try again</Button>
+      <Button onclick={app.session.restore}>Try again</Button>
     </div>
   </main>
-{:else if auth.state.status === 'authenticated' && runtime.context}
-  {@const context = runtime.context}
+{:else if auth.state.status === 'authenticated' && app.context}
+  {@const context = app.context}
   <main>
     {#key context}<ChatPage
         connectionState={context.connectionState}
@@ -56,14 +56,14 @@
         onLoadConversations={context.chat.loadConversations}
         onSearch={context.chat.searchUsers}
         onStart={context.chat.startConversation}
-        onLogout={runtime.session.logout}
+        onLogout={app.session.logout}
       />{/key}
   </main>
 {:else if registering}
   <RegisterPage onRegister={register} onSignIn={() => (registering = false)} />
 {:else}
   <LoginPage
-    onLogin={runtime.session.login}
+    onLogin={app.session.login}
     onCreateAccount={() => (registering = true)}
   />
 {/if}

@@ -1,16 +1,19 @@
 import type { CurrentUser } from '@chat/contracts/users';
 
-type AuthState =
+type Authentication =
   | { readonly status: 'loading' | 'anonymous'; readonly user: null }
   | { readonly status: 'authenticated'; readonly user: Readonly<CurrentUser> }
   | { readonly status: 'error'; readonly user: null; readonly error: string };
 
-export type AuthView = { readonly state: AuthState };
+export type AuthState = { readonly state: Authentication };
 
-export class AuthStore {
-  private current = $state.raw<AuthState>({ status: 'loading', user: null });
+export class AuthStore implements AuthState {
+  private current = $state.raw<Authentication>({
+    status: 'loading',
+    user: null,
+  });
 
-  get state(): AuthState {
+  get state(): Authentication {
     return this.current;
   }
 

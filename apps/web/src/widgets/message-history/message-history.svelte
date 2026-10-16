@@ -1,9 +1,9 @@
 <script lang="ts">
   import { tick, untrack } from 'svelte';
   import { Alert, Button, Spinner } from 'flowbite-svelte';
-  import type { MessagesView } from '@entities/message';
+  import type { MessagesState } from '@entities/message';
   import { UserAvatar } from '@entities/user';
-  import type { ConversationView } from '@entities/conversation';
+  import type { ReadonlyConversation } from '@entities/conversation';
   import { SendMessage } from '@features/send-message';
   import { Icon } from '@shared/ui';
   import { formatTime } from '@shared/lib';
@@ -16,8 +16,8 @@
     onBack,
     connectionState,
   }: {
-    messages: MessagesView;
-    conversation: ConversationView;
+    messages: MessagesState;
+    conversation: ReadonlyConversation;
     onSend: (conversationId: string, text: string) => Promise<void>;
     onLoad: (more?: boolean) => Promise<void>;
     userId: string;

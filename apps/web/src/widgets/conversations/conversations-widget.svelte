@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Alert, Button, Spinner } from 'flowbite-svelte';
-  import type { ConversationsView } from '@entities/conversation';
+  import type { ConversationsState } from '@entities/conversation';
   import { UserAvatar } from '@entities/user';
   import { InfiniteScroll } from '@shared/ui';
   import { formatTime } from '@shared/lib';
@@ -10,7 +10,7 @@
     onSelect,
     onLoad,
   }: {
-    conversations: ConversationsView;
+    conversations: ConversationsState;
     selectedId: string | null;
     onSelect: (id: string) => void;
     onLoad: (more?: boolean) => Promise<void>;

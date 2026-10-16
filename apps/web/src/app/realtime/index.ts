@@ -1,1 +1,1 @@
-export { createRealtime } from './realtime';
+export { createRealtimeClient } from './realtime.client';

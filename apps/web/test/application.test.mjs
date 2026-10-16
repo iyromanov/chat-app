@@ -24,8 +24,8 @@ const modules = await createServer({
   appType: 'custom',
 });
 after(() => modules.close());
-const { createAppRuntime } = await modules.ssrLoadModule(
-  '/src/app/runtime/runtime.svelte.ts',
+const { createApplication } = await modules.ssrLoadModule(
+  '/src/app/application.svelte.ts',
 );
 const { createUserSearch } = await modules.ssrLoadModule(
   '/src/features/find-users/user-search.svelte.ts',
@@ -98,25 +98,25 @@ async function fixture(t, { rejectSocket = false } = {}) {
   });
   await new Promise((resolve) => http.listen(0, '127.0.0.1', resolve));
   const baseUrl = `http://127.0.0.1:${http.address().port}`;
-  const runtime = createAppRuntime({ baseUrl });
+  const app = createApplication({ baseUrl });
   t.after(async () => {
-    runtime.dispose();
+    app.dispose();
     await new Promise((resolve) => {
       io.close(resolve);
       http.closeAllConnections();
     });
   });
-  return { runtime, routes, requests, sockets };
+  return { app, routes, requests, sockets };
 }
 
-async function signIn(runtime) {
-  await runtime.session.login({ email: user.email, password: 'password123' });
-  return runtime.context;
+async function signIn(app) {
+  await app.session.login({ email: user.email, password: 'password123' });
+  return app.context;
 }
 
 test('local user search browses, paginates, retries failures and distinguishes empty results', async (t) => {
-  const { runtime, routes } = await fixture(t);
-  const context = await signIn(runtime);
+  const { app, routes } = await fixture(t);
+  const context = await signIn(app);
   const users = createUserSearch(context.chat.searchUsers);
   t.after(users.dispose);
   const bob = conversation.counterpart;
@@ -157,8 +157,8 @@ test('local user search browses, paginates, retries failures and distinguishes e
 test('a changed search ignores old first pages, pagination and failures', async (t) => {
   for (const mode of ['first page', 'pagination', 'failure']) {
     await t.test(mode, async (t) => {
-      const { runtime, routes } = await fixture(t);
-      const context = await signIn(runtime);
+      const { app, routes } = await fixture(t);
+      const context = await signIn(app);
       const users = createUserSearch(context.chat.searchUsers);
       t.after(users.dispose);
       const started = deferred();
@@ -207,8 +207,8 @@ test('a changed search ignores old first pages, pagination and failures', async 
 });
 
 test('search failures can retry the first page and disposed UI ignores pending results', async (t) => {
-  const { runtime, routes } = await fixture(t);
-  const context = await signIn(runtime);
+  const { app, routes } = await fixture(t);
+  const context = await signIn(app);
   const users = createUserSearch(context.chat.searchUsers);
   routes.set('/api/users?search=', (response) => response.destroy());
   await users.load();
@@ -233,8 +233,8 @@ test('search failures can retry the first page and disposed UI ignores pending r
 test('search results and unauthorized responses from a previous login cannot enter a new UI', async (t) => {
   for (const status of [200, 401]) {
     await t.test(String(status), async (t) => {
-      const { runtime, routes } = await fixture(t);
-      const previous = await signIn(runtime);
+      const { app, routes } = await fixture(t);
+      const previous = await signIn(app);
       const started = deferred();
       const ready = deferred();
       routes.set('/api/users?search=old', async (response) => {
@@ -251,15 +251,15 @@ test('search results and unauthorized responses from a previous login cannot ent
       const old = previous.chat.searchUsers('old');
       const rejected = assert.rejects(old);
       await started.promise;
-      await runtime.session.logout();
-      const current = await signIn(runtime);
+      await app.session.logout();
+      const current = await signIn(app);
       const users = createUserSearch(current.chat.searchUsers);
       t.after(users.dispose);
       await users.load();
       ready.resolve();
       await rejected;
-      assert.equal(runtime.context, current);
-      assert.equal(runtime.auth.state.status, 'authenticated');
+      assert.equal(app.context, current);
+      assert.equal(app.auth.state.status, 'authenticated');
       assert.deepEqual(users.items, []);
       assert.equal(users.error, '');
       await assert.rejects(previous.chat.searchUsers(''), /chat has ended/);
@@ -268,8 +268,8 @@ test('search results and unauthorized responses from a previous login cannot ent
 });
 
 test('starting and reopening a conversation updates its list and opens saved history through one action', async (t) => {
-  const { runtime, routes, sockets } = await fixture(t);
-  const context = await signIn(runtime);
+  const { app, routes, sockets } = await fixture(t);
+  const context = await signIn(app);
   await until(
     () => sockets.length === 1 && !context.chat.conversations.loading,
   );
@@ -304,8 +304,8 @@ test('starting and reopening a conversation updates its list and opens saved his
 test('a delayed start cannot override a later conversation selection or start', async (t) => {
   for (const phase of ['creation', 'history', 'another start', 'failure']) {
     await t.test(phase, async (t) => {
-      const { runtime, routes, sockets } = await fixture(t);
-      const context = await signIn(runtime);
+      const { app, routes, sockets } = await fixture(t);
+      const context = await signIn(app);
       await until(
         () => sockets.length === 1 && !context.chat.conversations.loading,
       );
@@ -364,8 +364,8 @@ test('a delayed start cannot override a later conversation selection or start', 
 });
 
 test('failed starts preserve the selected history and late starts cannot enter a new login', async (t) => {
-  const { runtime, routes, sockets } = await fixture(t);
-  const previous = await signIn(runtime);
+  const { app, routes, sockets } = await fixture(t);
+  const previous = await signIn(app);
   await until(
     () => sockets.length === 1 && !previous.chat.conversations.loading,
   );
@@ -398,11 +398,11 @@ test('failed starts preserve the selected history and late starts cannot enter a
   const late = previous.chat.startConversation(conversation.counterpart.id);
   const rejected = assert.rejects(late, /chat has ended/);
   await started.promise;
-  await runtime.session.logout();
-  const current = await signIn(runtime);
+  await app.session.logout();
+  const current = await signIn(app);
   ready.resolve();
   await rejected;
-  assert.equal(runtime.context, current);
+  assert.equal(app.context, current);
   assert.deepEqual(current.chat.conversations.items, []);
   assert.equal(current.chat.messages.conversationId, null);
   assert.deepEqual(previous.chat.conversations.items, []);
@@ -413,8 +413,8 @@ test('failed starts preserve the selected history and late starts cannot enter a
 });
 
 test('removing a search result cancels its pending conversation selection', async (t) => {
-  const { runtime, routes, sockets, requests } = await fixture(t);
-  const context = await signIn(runtime);
+  const { app, routes, sockets, requests } = await fixture(t);
+  const context = await signIn(app);
   await until(
     () => sockets.length === 1 && !context.chat.conversations.loading,
   );
@@ -457,8 +457,8 @@ test('removing a search result cancels its pending conversation selection', asyn
 });
 
 test('an empty conversation survives a stale list refresh and can exchange messages after starting', async (t) => {
-  const { runtime, routes, sockets } = await fixture(t);
-  const context = await signIn(runtime);
+  const { app, routes, sockets } = await fixture(t);
+  const context = await signIn(app);
   await until(
     () => sockets.length === 1 && !context.chat.conversations.loading,
   );
@@ -501,7 +501,7 @@ test('an empty conversation survives a stale list refresh and can exchange messa
 test('initial restoration distinguishes unauthorized, server and network errors and can retry', async (t) => {
   for (const failure of ['unauthorized', 'server', 'network']) {
     await t.test(failure, async (t) => {
-      const { runtime, routes, sockets } = await fixture(t);
+      const { app, routes, sockets } = await fixture(t);
       routes.set('/api/auth/me', (response) => {
         if (failure === 'network') return response.destroy();
         json(
@@ -510,50 +510,50 @@ test('initial restoration distinguishes unauthorized, server and network errors 
           failure === 'unauthorized' ? 401 : 503,
         );
       });
-      assert.equal(runtime.auth.state.status, 'loading');
-      assert.equal(runtime.context, null);
-      await runtime.start();
+      assert.equal(app.auth.state.status, 'loading');
+      assert.equal(app.context, null);
+      await app.start();
       assert.equal(
-        runtime.auth.state.status,
+        app.auth.state.status,
         failure === 'unauthorized' ? 'anonymous' : 'error',
       );
-      assert.equal(runtime.context, null);
+      assert.equal(app.context, null);
       assert.equal(sockets.length, 0);
 
       routes.delete('/api/auth/me');
-      await runtime.session.restore();
-      assert.equal(runtime.auth.state.status, 'authenticated');
-      assert.deepEqual(runtime.auth.state.user, user);
+      await app.session.restore();
+      assert.equal(app.auth.state.status, 'authenticated');
+      assert.deepEqual(app.auth.state.user, user);
       await until(() => sockets.length === 1);
     });
   }
 });
 
 test('starting repeatedly and rechecking an authenticated session reuse one context and socket', async (t) => {
-  const { runtime, requests, sockets } = await fixture(t);
-  const first = runtime.start();
-  assert.equal(runtime.start(), first);
+  const { app, requests, sockets } = await fixture(t);
+  const first = app.start();
+  assert.equal(app.start(), first);
   await first;
-  const context = runtime.context;
-  await runtime.start();
+  const context = app.context;
+  await app.start();
   assert.equal(requests.filter((url) => url === '/api/auth/me').length, 1);
-  await runtime.session.restore();
-  await runtime.session.revalidate();
+  await app.session.restore();
+  await app.session.revalidate();
   await until(() => sockets.length === 1);
-  assert.equal(runtime.context, context);
-  assert.equal(runtime.auth.state.status, 'authenticated');
-  runtime.dispose();
-  runtime.dispose();
-  await runtime.start();
+  assert.equal(app.context, context);
+  assert.equal(app.auth.state.status, 'authenticated');
+  app.dispose();
+  app.dispose();
+  await app.start();
   await until(() => !sockets[0].connected);
-  assert.equal(runtime.context, null);
+  assert.equal(app.context, null);
   assert.equal(sockets.length, 1);
 });
 
 test('login and registration use their response user without an additional session request', async (t) => {
   for (const action of ['login', 'register']) {
     await t.test(action, async (t) => {
-      const { runtime, routes, requests, sockets } = await fixture(t);
+      const { app, routes, requests, sockets } = await fixture(t);
       const input = {
         email: user.email,
         password: 'password123',
@@ -569,9 +569,9 @@ test('login and registration use their response user without an additional sessi
           json(response, returnedUser, action === 'register' ? 201 : 200);
         });
       });
-      await runtime.session[action](input);
+      await app.session[action](input);
       assert.deepEqual(body, input);
-      assert.deepEqual(runtime.auth.state.user, returnedUser);
+      assert.deepEqual(app.auth.state.user, returnedUser);
       await until(() => sockets.length === 1);
       assert.equal(requests.includes('/api/auth/me'), false);
     });
@@ -579,11 +579,11 @@ test('login and registration use their response user without an additional sessi
 });
 
 test('login and registration expose failures without creating a private context', async (t) => {
-  const { runtime, routes, sockets } = await fixture(t);
+  const { app, routes, sockets } = await fixture(t);
   routes.set('/api/auth/me', (response) =>
     json(response, { message: 'Sign in' }, 401),
   );
-  await runtime.start();
+  await app.start();
   for (const [action, status] of [
     ['login', 401],
     ['register', 409],
@@ -600,7 +600,7 @@ test('login and registration expose failures without creating a private context'
       ),
     );
     await assert.rejects(
-      runtime.session[action]({
+      app.session[action]({
         email: user.email,
         username: user.username,
         password: 'password123',
@@ -611,8 +611,8 @@ test('login and registration expose failures without creating a private context'
         return true;
       },
     );
-    assert.equal(runtime.auth.state.status, 'anonymous');
-    assert.equal(runtime.context, null);
+    assert.equal(app.auth.state.status, 'anonymous');
+    assert.equal(app.context, null);
     assert.equal(sockets.length, 0);
   }
 });
@@ -620,7 +620,7 @@ test('login and registration expose failures without creating a private context'
 test('late restoration success and unauthorized responses cannot replace a newer login', async (t) => {
   for (const status of [200, 401]) {
     await t.test(String(status), async (t) => {
-      const { runtime, routes } = await fixture(t);
+      const { app, routes } = await fixture(t);
       const started = deferred();
       const ready = deferred();
       routes.set('/api/auth/me', (response) => {
@@ -635,20 +635,20 @@ test('late restoration success and unauthorized responses cannot replace a newer
           ),
         );
       });
-      const restoration = runtime.start();
+      const restoration = app.start();
       await started.promise;
-      const current = await signIn(runtime);
+      const current = await signIn(app);
       ready.resolve();
       await restoration;
-      assert.equal(runtime.context, current);
-      assert.deepEqual(runtime.auth.state.user, user);
+      assert.equal(app.context, current);
+      assert.deepEqual(app.auth.state.user, user);
     });
   }
 });
 
 test('logout failures preserve the current context; an unauthorized response ends it', async (t) => {
-  const { runtime, routes, sockets } = await fixture(t);
-  const context = await signIn(runtime);
+  const { app, routes, sockets } = await fixture(t);
+  const context = await signIn(app);
   await until(
     () =>
       sockets.length === 1 &&
@@ -661,27 +661,27 @@ test('logout failures preserve the current context; an unauthorized response end
       if (failure === 'network') return response.destroy();
       json(response, { code: 'INTERNAL_ERROR', message: 'Unavailable' }, 503);
     });
-    await assert.rejects(runtime.session.logout());
-    assert.equal(runtime.context, context);
-    assert.equal(runtime.auth.state.status, 'authenticated');
+    await assert.rejects(app.session.logout());
+    assert.equal(app.context, context);
+    assert.equal(app.auth.state.status, 'authenticated');
     assert.equal(context.chat.conversations.items.length, 1);
     assert.equal(sockets[0].connected, true);
   }
   routes.set('/api/auth/logout', (response) =>
     json(response, { message: 'Expired' }, 401),
   );
-  await runtime.session.logout();
+  await app.session.logout();
   await until(() => !sockets[0].connected);
-  assert.equal(runtime.context, null);
-  assert.equal(runtime.auth.state.status, 'anonymous');
+  assert.equal(app.context, null);
+  assert.equal(app.auth.state.status, 'anonymous');
   assert.deepEqual(context.chat.conversations.items, []);
 });
 
 test('late logout errors and unauthorized responses cannot end a newer login', async (t) => {
   for (const status of [401, 503]) {
     await t.test(String(status), async (t) => {
-      const { runtime, routes } = await fixture(t);
-      await signIn(runtime);
+      const { app, routes } = await fixture(t);
+      await signIn(app);
       const started = deferred();
       const ready = deferred();
       routes.set('/api/auth/logout', (response) => {
@@ -690,13 +690,13 @@ test('late logout errors and unauthorized responses cannot end a newer login', a
           json(response, { message: 'Unavailable' }, status),
         );
       });
-      const logout = runtime.session.logout();
+      const logout = app.session.logout();
       await started.promise;
-      const current = await signIn(runtime);
+      const current = await signIn(app);
       ready.resolve();
       await logout;
-      assert.equal(runtime.context, current);
-      assert.equal(runtime.auth.state.status, 'authenticated');
+      assert.equal(app.context, current);
+      assert.equal(app.auth.state.status, 'authenticated');
     });
   }
 });
@@ -704,49 +704,49 @@ test('late logout errors and unauthorized responses cannot end a newer login', a
 test('socket connection failure rechecks authorization and keeps login on a network failure', async (t) => {
   for (const failure of ['network', 'unauthorized']) {
     await t.test(failure, async (t) => {
-      const { runtime, routes, requests } = await fixture(t, {
+      const { app, routes, requests } = await fixture(t, {
         rejectSocket: true,
       });
       routes.set('/api/auth/me', (response) => {
         if (failure === 'network') return response.destroy();
         json(response, { message: 'Expired' }, 401);
       });
-      const context = await signIn(runtime);
+      const context = await signIn(app);
       await until(() => requests.includes('/api/auth/me'));
       if (failure === 'unauthorized') {
-        await until(() => runtime.context === null);
-        assert.equal(runtime.auth.state.status, 'anonymous');
+        await until(() => app.context === null);
+        assert.equal(app.auth.state.status, 'anonymous');
       } else {
-        await runtime.session.revalidate();
-        assert.equal(runtime.context, context);
-        assert.equal(runtime.auth.state.status, 'authenticated');
+        await app.session.revalidate();
+        assert.equal(app.context, context);
+        assert.equal(app.auth.state.status, 'authenticated');
       }
     });
   }
 });
 
 test('disposing invalidates a pending login and prevents all later lifecycle requests', async (t) => {
-  const { runtime, routes, requests, sockets } = await fixture(t);
+  const { app, routes, requests, sockets } = await fixture(t);
   const started = deferred();
   const ready = deferred();
   routes.set('/api/auth/login', (response) => {
     started.resolve();
     ready.promise.then(() => json(response, user));
   });
-  const login = signIn(runtime);
+  const login = signIn(app);
   await started.promise;
-  runtime.dispose();
+  app.dispose();
   ready.resolve();
   await login;
   const count = requests.length;
-  await runtime.start();
-  await runtime.session.restore();
-  await runtime.session.login({ email: user.email, password: 'password123' });
-  await runtime.session.register({ ...user, password: 'password123' });
-  await runtime.session.logout();
-  await runtime.session.revalidate();
-  assert.equal(runtime.context, null);
-  assert.equal(runtime.auth.state.status, 'anonymous');
+  await app.start();
+  await app.session.restore();
+  await app.session.login({ email: user.email, password: 'password123' });
+  await app.session.register({ ...user, password: 'password123' });
+  await app.session.logout();
+  await app.session.revalidate();
+  assert.equal(app.context, null);
+  assert.equal(app.auth.state.status, 'anonymous');
   assert.equal(sockets.length, 0);
   assert.equal(requests.length, count);
 });
@@ -754,22 +754,22 @@ test('disposing invalidates a pending login and prevents all later lifecycle req
 test('application roots own independent authorization and chat state', async (t) => {
   const first = await fixture(t);
   const second = await fixture(t);
-  await Promise.all([first.runtime.start(), second.runtime.start()]);
-  const previous = first.runtime.context;
-  const current = second.runtime.context;
+  await Promise.all([first.app.start(), second.app.start()]);
+  const previous = first.app.context;
+  const current = second.app.context;
   assert.notEqual(previous.api, current.api);
   assert.notEqual(previous.chat.messages, current.chat.messages);
-  await first.runtime.session.logout();
-  assert.equal(first.runtime.context, null);
-  assert.equal(second.runtime.context, current);
-  assert.equal(second.runtime.auth.state.status, 'authenticated');
+  await first.app.session.logout();
+  assert.equal(first.app.context, null);
+  assert.equal(second.app.context, current);
+  assert.equal(second.app.auth.state.status, 'authenticated');
 });
 
 test('restoration, socket events and reconnect share chat synchronization', async (t) => {
-  const { runtime, sockets, routes } = await fixture(t);
-  await runtime.session.restore();
-  assert.equal(runtime.auth.state.status, 'authenticated');
-  const context = runtime.context;
+  const { app, sockets, routes } = await fixture(t);
+  await app.session.restore();
+  assert.equal(app.auth.state.status, 'authenticated');
+  const context = app.context;
   await until(
     () =>
       sockets.length === 1 &&
@@ -807,7 +807,7 @@ test('restoration, socket events and reconnect share chat synchronization', asyn
   await until(
     () => sockets.length === 2 && context.chat.messages.items.length === 2,
   );
-  assert.equal(runtime.context, context);
+  assert.equal(app.context, context);
   assert.equal(context.chat.conversations.items.length, 1);
   assert.deepEqual(
     context.chat.messages.items.map((item) => item.id),
@@ -816,7 +816,7 @@ test('restoration, socket events and reconnect share chat synchronization', asyn
 });
 
 test('a new login isolates late HTTP failures, logout responses and store loads', async (t) => {
-  const { runtime, routes, sockets } = await fixture(t);
+  const { app, routes, sockets } = await fixture(t);
   const conversationsStarted = deferred();
   const conversationsResponse = deferred();
   routes.set('/api/conversations', (response) => {
@@ -825,7 +825,7 @@ test('a new login isolates late HTTP failures, logout responses and store loads'
       json(response, { items: [conversation], nextCursor: null }),
     );
   });
-  const previous = await signIn(runtime);
+  const previous = await signIn(app);
   await conversationsStarted.promise;
   await until(() => sockets.length === 1);
 
@@ -849,10 +849,10 @@ test('a new login isolates late HTTP failures, logout responses and store loads'
       response.end();
     });
   });
-  const logout = runtime.session.logout();
+  const logout = app.session.logout();
   await logoutStarted.promise;
   routes.delete('/api/conversations');
-  const current = await signIn(runtime);
+  const current = await signIn(app);
   assert.notEqual(current, previous);
   assert.notEqual(current.api, previous.api);
   assert.notEqual(current.chat.messages, previous.chat.messages);
@@ -871,39 +871,39 @@ test('a new login isolates late HTTP failures, logout responses and store loads'
       !current.chat.conversations.loading,
   );
   assert.equal(sockets[0].connected, false);
-  assert.equal(runtime.auth.state.status, 'authenticated');
-  assert.equal(runtime.context, current);
+  assert.equal(app.auth.state.status, 'authenticated');
+  assert.equal(app.context, current);
   assert.deepEqual(previous.chat.conversations.items, []);
   assert.deepEqual(current.chat.conversations.items, []);
 });
 
 test('current HTTP unauthorized and socket auth end retire the context', async (t) => {
-  const { runtime, routes, sockets } = await fixture(t);
-  const previous = await signIn(runtime);
+  const { app, routes, sockets } = await fixture(t);
+  const previous = await signIn(app);
   await until(() => sockets.length === 1);
   previous.chat.conversationCreated(conversation);
   sockets[0].emit('auth:ended');
-  await until(() => runtime.context === null && !sockets[0].connected);
-  assert.equal(runtime.auth.state.status, 'anonymous');
+  await until(() => app.context === null && !sockets[0].connected);
+  assert.equal(app.auth.state.status, 'anonymous');
   assert.deepEqual(previous.chat.conversations.items, []);
 
-  await signIn(runtime);
+  await signIn(app);
   routes.set('/api/auth/me', (response) =>
     json(response, { code: 'UNAUTHORIZED', message: 'Expired' }, 401),
   );
-  await runtime.session.revalidate();
-  assert.equal(runtime.context, null);
-  assert.equal(runtime.auth.state.status, 'anonymous');
+  await app.session.revalidate();
+  assert.equal(app.context, null);
+  assert.equal(app.auth.state.status, 'anonymous');
 });
 
 test('REST recovery and visibility refresh work when Socket.io is unavailable', async (t) => {
-  const { runtime, routes, requests } = await fixture(t, {
+  const { app, routes, requests } = await fixture(t, {
     rejectSocket: true,
   });
   routes.set('/api/conversations', (response) =>
     json(response, { items: [conversation], nextCursor: null }),
   );
-  const context = await signIn(runtime);
+  const context = await signIn(app);
   await until(
     () =>
       context.chat.conversations.items.length === 1 &&
@@ -926,16 +926,16 @@ test('REST recovery and visibility refresh work when Socket.io is unavailable', 
   routes.set('/api/auth/me', (response) =>
     json(response, { code: 'NETWORK_ERROR', message: 'Unavailable' }, 503),
   );
-  runtime.visibilityChanged();
+  app.visibilityChanged();
   await until(
     () => requests.filter((url) => url === '/api/conversations').length > count,
   );
-  assert.equal(runtime.context, context);
-  assert.equal(runtime.auth.state.status, 'authenticated');
+  assert.equal(app.context, context);
+  assert.equal(app.auth.state.status, 'authenticated');
 });
 
 test('disposing during restoration prevents a late response from creating a context', async (t) => {
-  const { runtime, routes, sockets } = await fixture(t);
+  const { app, routes, sockets } = await fixture(t);
   const started = deferred();
   const responseReady = deferred();
   routes.set('/api/auth/me', (response) => {
@@ -948,20 +948,20 @@ test('disposing during restoration prevents a late response from creating a cont
       json(response, user);
     });
   });
-  const restoration = runtime.session.restore();
+  const restoration = app.session.restore();
   await started.promise;
-  runtime.dispose();
+  app.dispose();
   responseReady.resolve();
   await restoration;
-  await signIn(runtime);
-  assert.equal(runtime.context, null);
-  assert.equal(runtime.auth.state.status, 'anonymous');
+  await signIn(app);
+  assert.equal(app.context, null);
+  assert.equal(app.auth.state.status, 'anonymous');
   assert.equal(sockets.length, 0);
 });
 
 test('logout succeeds when the socket ends authentication before the HTTP response', async (t) => {
-  const { runtime, routes, sockets } = await fixture(t);
-  const context = await signIn(runtime);
+  const { app, routes, sockets } = await fixture(t);
+  const context = await signIn(app);
   await until(() => sockets.length === 1);
   routes.set('/api/auth/logout', (response) => {
     sockets[0].once('disconnect', () => {
@@ -970,28 +970,28 @@ test('logout succeeds when the socket ends authentication before the HTTP respon
     });
     sockets[0].emit('auth:ended');
   });
-  await runtime.session.logout();
-  assert.equal(runtime.context, null);
-  assert.equal(runtime.auth.state.status, 'anonymous');
+  await app.session.logout();
+  assert.equal(app.context, null);
+  assert.equal(app.auth.state.status, 'anonymous');
   assert.deepEqual(context.chat.conversations.items, []);
 });
 
 test('the client waits for server authorization instead of a local JWT deadline', async (t) => {
-  const { runtime, routes, sockets } = await fixture(t);
+  const { app, routes, sockets } = await fixture(t);
   routes.set('/api/auth/login', (response) => {
     response.setHeader('X-Auth-Expires-At', '2000-01-01T00:00:00.000Z');
     json(response, user);
   });
-  const context = await signIn(runtime);
+  const context = await signIn(app);
   await until(() => sockets.length === 1);
   context.chat.conversationCreated(conversation);
   t.mock.timers.enable({ apis: ['Date'] });
   t.mock.timers.setTime(Date.now() + 86400000);
-  assert.equal(runtime.context, context);
-  assert.equal(runtime.auth.state.status, 'authenticated');
+  assert.equal(app.context, context);
+  assert.equal(app.auth.state.status, 'authenticated');
   t.mock.timers.reset();
   sockets[0].emit('auth:ended');
-  await until(() => runtime.context === null && !sockets[0].connected);
+  await until(() => app.context === null && !sockets[0].connected);
   assert.deepEqual(context.chat.conversations.items, []);
 });
 
@@ -1073,8 +1073,8 @@ test('API client handles empty logout responses and normalizes HTTP errors', asy
 });
 
 test('initial load and first-page refresh merge live events and reset the older history cursor', async (t) => {
-  const { runtime, routes, sockets } = await fixture(t);
-  const context = await signIn(runtime);
+  const { app, routes, sockets } = await fixture(t);
+  const context = await signIn(app);
   await until(() => sockets.length === 1);
   const socket = sockets[0];
   const path = `/api/conversations/${conversation.id}/messages`;
@@ -1148,8 +1148,8 @@ test('initial load and first-page refresh merge live events and reset the older 
 });
 
 test('logout during recovery discards late pages and never restarts private loads', async (t) => {
-  const { runtime, routes, requests } = await fixture(t);
-  const context = await signIn(runtime);
+  const { app, routes, requests } = await fixture(t);
+  const context = await signIn(app);
   const path = `/api/conversations/${conversation.id}/messages`;
   routes.set(path, (response) =>
     json(response, { items: [message], nextCursor: null }),
@@ -1166,10 +1166,10 @@ test('logout during recovery discards late pages and never restarts private load
   });
   context.chat.refresh();
   await started.promise;
-  await runtime.session.logout();
+  await app.session.logout();
   ready.resolve();
   await delay(50);
-  assert.equal(runtime.context, null);
+  assert.equal(app.context, null);
   assert.deepEqual(context.chat.messages.items, []);
   assert.deepEqual(context.chat.conversations.items, []);
   assert.equal(
@@ -1179,7 +1179,7 @@ test('logout during recovery discards late pages and never restarts private load
 });
 
 test('conversation refresh resets to its first page and keeps newer live activity over stale REST', async (t) => {
-  const { runtime, routes, sockets } = await fixture(t);
+  const { app, routes, sockets } = await fixture(t);
   const older = {
     ...conversation,
     id: '111111111111111111111111',
@@ -1194,7 +1194,7 @@ test('conversation refresh resets to its first page and keeps newer live activit
   routes.set('/api/conversations?cursor=older-conversations', (response) =>
     json(response, { items: [older], nextCursor: null }),
   );
-  const context = await signIn(runtime);
+  const context = await signIn(app);
   await until(
     () =>
       sockets.length === 1 &&
@@ -1249,8 +1249,8 @@ test('conversation refresh resets to its first page and keeps newer live activit
 });
 
 test('refresh reconciles late commits in its latest page and discards previously loaded older history', async (t) => {
-  const { runtime, routes, requests, sockets } = await fixture(t);
-  const context = await signIn(runtime);
+  const { app, routes, requests, sockets } = await fixture(t);
+  const context = await signIn(app);
   await until(
     () =>
       sockets.length === 1 &&
@@ -1353,8 +1353,8 @@ test('refresh reconciles late commits in its latest page and discards previously
 });
 
 test('refresh loads only the latest 50 missed messages and leaves the rest for Load more', async (t) => {
-  const { runtime, routes, sockets } = await fixture(t);
-  const context = await signIn(runtime);
+  const { app, routes, sockets } = await fixture(t);
+  const context = await signIn(app);
   await until(
     () =>
       sockets.length === 1 &&
@@ -1411,8 +1411,8 @@ function requestBody(request) {
 }
 
 test('ordinary sends merge HTTP and WS by server ID in either order and preserve newer previews', async (t) => {
-  const { runtime, routes, sockets } = await fixture(t);
-  const context = await signIn(runtime);
+  const { app, routes, sockets } = await fixture(t);
+  const context = await signIn(app);
   await until(
     () =>
       sockets.length === 1 &&
@@ -1476,8 +1476,8 @@ test('ordinary sends merge HTTP and WS by server ID in either order and preserve
 });
 
 test('a lost send response remains an error even when WS delivers it and a new send can create another message', async (t) => {
-  const { runtime, routes, sockets } = await fixture(t);
-  const context = await signIn(runtime);
+  const { app, routes, sockets } = await fixture(t);
+  const context = await signIn(app);
   await until(
     () =>
       sockets.length === 1 &&
@@ -1509,7 +1509,7 @@ test('a lost send response remains an error even when WS delivers it and a new s
 });
 
 test('an unknown conversation event synchronizes through the controller and survives a stale in-flight list', async (t) => {
-  const { runtime, routes, sockets } = await fixture(t);
+  const { app, routes, sockets } = await fixture(t);
   const started = deferred();
   const ready = deferred();
   routes.set('/api/conversations', async (response) => {
@@ -1517,7 +1517,7 @@ test('an unknown conversation event synchronizes through the controller and surv
     await ready.promise;
     json(response, { items: [conversation], nextCursor: null });
   });
-  const context = await signIn(runtime);
+  const context = await signIn(app);
   await started.promise;
   await until(() => sockets.length === 1);
   sockets[0].emit('message:created', message);
@@ -1535,8 +1535,8 @@ test('an unknown conversation event synchronizes through the controller and surv
 });
 
 test('a late send updates its own preview after switching history and cannot change a new login', async (t) => {
-  const { runtime, routes, sockets } = await fixture(t);
-  const context = await signIn(runtime);
+  const { app, routes, sockets } = await fixture(t);
+  const context = await signIn(app);
   await until(
     () =>
       sockets.length === 1 &&
@@ -1579,8 +1579,8 @@ test('a late send updates its own preview after switching history and cannot cha
   const lateSend = context.chat.sendMessage(conversation.id, 'Hello');
   const rejection = assert.rejects(lateSend, /chat has ended/);
   await lateStarted.promise;
-  await runtime.session.logout();
-  const current = await signIn(runtime);
+  await app.session.logout();
+  const current = await signIn(app);
   lateReady.resolve();
   await rejection;
   assert.deepEqual(current.chat.messages.items, []);
@@ -1590,8 +1590,8 @@ test('a late send updates its own preview after switching history and cannot cha
 });
 
 test('switching conversations clears history immediately and ignores late success and failure responses', async (t) => {
-  const { runtime, routes, sockets } = await fixture(t);
-  const context = await signIn(runtime);
+  const { app, routes, sockets } = await fixture(t);
+  const context = await signIn(app);
   await until(
     () =>
       sockets.length === 1 &&
@@ -1641,11 +1641,11 @@ test('switching conversations clears history immediately and ignores late succes
 });
 
 test('initial history failure can retry an empty result and background errors preserve data, login and retry mode', async (t) => {
-  const { runtime, routes, sockets } = await fixture(t);
+  const { app, routes, sockets } = await fixture(t);
   routes.set('/api/conversations', (response) =>
     json(response, { items: [conversation], nextCursor: 'old-list' }),
   );
-  const context = await signIn(runtime);
+  const context = await signIn(app);
   await until(
     () =>
       sockets.length === 1 &&
@@ -1688,8 +1688,8 @@ test('initial history failure can retry an empty result and background errors pr
   assert.ok(context.chat.conversations.error);
   assert.deepEqual(context.chat.messages.items, [message]);
   assert.deepEqual(context.chat.conversations.items, [conversation]);
-  assert.equal(runtime.context, context);
-  assert.equal(runtime.auth.state.status, 'authenticated');
+  assert.equal(app.context, context);
+  assert.equal(app.auth.state.status, 'authenticated');
   routes.set(path, (response) =>
     json(response, { items: [], nextCursor: null }),
   );
@@ -1706,7 +1706,7 @@ test('initial history failure can retry an empty result and background errors pr
 });
 
 test('refresh supersedes in-flight pagination and dispose invalidates pending history and list responses', async (t) => {
-  const { runtime, routes, sockets } = await fixture(t);
+  const { app, routes, sockets } = await fixture(t);
   const path = `/api/conversations/${conversation.id}/messages`;
   routes.set(path, (response) =>
     json(response, { items: [message], nextCursor: 'old-history' }),
@@ -1714,7 +1714,7 @@ test('refresh supersedes in-flight pagination and dispose invalidates pending hi
   routes.set('/api/conversations', (response) =>
     json(response, { items: [conversation], nextCursor: 'old-list' }),
   );
-  const context = await signIn(runtime);
+  const context = await signIn(app);
   await until(
     () =>
       sockets.length === 1 &&
@@ -1768,7 +1768,7 @@ test('refresh supersedes in-flight pagination and dispose invalidates pending hi
   });
   const late = context.chat.refresh();
   await Promise.all([lateHistoryStarted.promise, lateListStarted.promise]);
-  runtime.dispose();
+  app.dispose();
   lateReady.resolve();
   await late;
   assert.deepEqual(context.chat.messages.items, []);
@@ -1782,7 +1782,7 @@ test('refresh supersedes in-flight pagination and dispose invalidates pending hi
 test('reconnect and returning to a visible tab replace loaded ranges and paginate from new cursors', async (t) => {
   for (const trigger of ['reconnect', 'visibility']) {
     await t.test(trigger, async (t) => {
-      const { runtime, routes, requests, sockets } = await fixture(t);
+      const { app, routes, requests, sockets } = await fixture(t);
       const path = `/api/conversations/${conversation.id}/messages`;
       const older = { ...message, id: '333333333333333333333333' };
       const other = {
@@ -1802,7 +1802,7 @@ test('reconnect and returning to a visible tab replace loaded ranges and paginat
       routes.set(`${path}?cursor=old-history`, (response) =>
         json(response, { items: [older], nextCursor: null }),
       );
-      const context = await signIn(runtime);
+      const context = await signIn(app);
       await until(
         () =>
           sockets.length === 1 &&
@@ -1853,10 +1853,10 @@ test('reconnect and returning to a visible tab replace loaded ranges and paginat
           configurable: true,
           value: document,
         });
-        runtime.visibilityChanged();
+        app.visibilityChanged();
         assert.equal(requests.length, before);
         document.visibilityState = 'visible';
-        runtime.visibilityChanged();
+        app.visibilityChanged();
       }
       await until(
         () =>

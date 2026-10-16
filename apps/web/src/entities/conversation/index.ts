@@ -1,6 +1,5 @@
 export {
-  createConversations,
-  type ConversationStore,
-  type ConversationsView,
-  type ConversationView,
-} from './conversations.svelte';
+  ConversationsStore,
+  type ConversationsState,
+  type ReadonlyConversation,
+} from './conversations.store.svelte';

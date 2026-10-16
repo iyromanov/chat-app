@@ -1,29 +1,29 @@
 import type { Conversation } from '@chat/contracts/conversations';
 import type { Message } from '@chat/contracts/messages';
 
-export type ConversationView = Readonly<
+export type ReadonlyConversation = Readonly<
   Omit<Conversation, 'counterpart' | 'lastMessage'>
 > & {
   readonly counterpart: Readonly<Conversation['counterpart']>;
   readonly lastMessage: Readonly<Message> | null;
 };
 
-export type ConversationsView = {
-  readonly items: readonly ConversationView[];
+export type ConversationsState = {
+  readonly items: readonly ReadonlyConversation[];
   readonly nextCursor: string | null;
   readonly loading: boolean;
   readonly error: string;
   readonly failedLoadMore: boolean;
 };
 
-class Conversations implements ConversationsView {
+export class ConversationsStore implements ConversationsState {
   private currentItems = $state.raw<Conversation[]>([]);
   private cursor = $state<string | null>(null);
   private pending = $state(false);
   private failure = $state('');
   private failedMore = $state(false);
 
-  get items(): ConversationsView['items'] {
+  get items(): ConversationsState['items'] {
     return this.currentItems;
   }
 
@@ -85,6 +85,7 @@ class Conversations implements ConversationsView {
     // Merge before trimming so a stale response cannot roll back a known preview.
     for (const item of items) this.upsert(item);
     if (!more) {
+      // eslint-disable-next-line svelte/prefer-svelte-reactivity -- Temporary lookup; not reactive state.
       const ids = new Set([...items.map((item) => item.id), ...eventIds]);
       this.currentItems = this.currentItems.filter((item) => ids.has(item.id));
     }
@@ -111,10 +112,4 @@ class Conversations implements ConversationsView {
     this.failure = '';
     this.failedMore = false;
   }
-}
-
-export type ConversationStore = Conversations;
-
-export function createConversations(): ConversationStore {
-  return new Conversations();
 }

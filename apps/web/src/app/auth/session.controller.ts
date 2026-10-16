@@ -1,7 +1,7 @@
 import type { Login, Registration } from '@chat/contracts/auth';
 import type { CurrentUser } from '@chat/contracts/users';
 import { ApiError, type ApiClient } from '@shared/api';
-import type { AuthStore } from './auth.svelte';
+import type { AuthStore } from './auth.store.svelte';
 
 export class SessionController {
   private generation = 0;
@@ -10,7 +10,6 @@ export class SessionController {
   constructor(
     private readonly store: AuthStore,
     private readonly publicApi: ApiClient['auth'],
-    private readonly getAuthenticatedApi: () => ApiClient['auth'] | undefined,
     private readonly onUserChanged: (user: CurrentUser | null) => void,
   ) {}
 
@@ -40,11 +39,10 @@ export class SessionController {
     this.authenticate(() => this.publicApi.register(input));
 
   logout = async () => {
-    const api = this.getAuthenticatedApi();
-    if (this.disposed || !api) return;
+    if (this.disposed || this.store.state.status !== 'authenticated') return;
     const generation = this.generation;
     try {
-      await api.logout();
+      await this.publicApi.logout();
       if (this.isCurrent(generation)) this.end();
     } catch (error) {
       if (!this.isCurrent(generation)) return;
@@ -54,11 +52,10 @@ export class SessionController {
   };
 
   revalidate = async () => {
-    const api = this.getAuthenticatedApi();
-    if (this.disposed || !api) return;
+    if (this.disposed || this.store.state.status !== 'authenticated') return;
     const generation = this.generation;
     try {
-      await api.me();
+      await this.publicApi.me();
     } catch (error) {
       if (!this.isCurrent(generation)) return;
       if (error instanceof ApiError && error.status === 401) this.end();
