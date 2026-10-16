@@ -29,7 +29,7 @@
     previousActive = active;
     untrack(() => {
       if (active) {
-        if (!users.items.length && !users.loading) users.load();
+        if (!users.items.length && !users.pagination.loading) users.load();
         tick().then(() => {
           if (active) searchInput?.focus();
         });
@@ -98,16 +98,17 @@
         userId={user.id}
         username={user.username}
       />{/each}
-    {#if users.loading}<div
+    {#if users.pagination.loading}<div
         role="status"
         class="flex items-center justify-center gap-2 p-5 text-sm text-gray-500"
       >
         <Spinner size="4" />Loading users…
       </div>
-    {:else if users.error}<div class="space-y-3 p-4">
-        <Alert color="red" role="alert">{users.error}</Alert><Button
+    {:else if users.pagination.error}<div class="space-y-3 p-4">
+        <Alert color="red" role="alert">{users.pagination.error}</Alert><Button
           size="sm"
-          onclick={() => users.load(!!users.nextCursor)}>Try again</Button
+          onclick={() => users.load(users.pagination.failedMode === 'next')}
+          >Try again</Button
         >
       </div>
     {:else if users.items.length === 0}<p
@@ -115,7 +116,7 @@
       >
         {users.search ? 'No users found' : 'No other users yet'}
       </p>
-    {:else if users.nextCursor}<InfiniteScroll
+    {:else if users.pagination.nextCursor}<InfiniteScroll
         onLoad={() => users.load(true)}
       />{/if}
   </div>

@@ -57,18 +57,20 @@
         </span>
       </Button>
     {/each}
-    {#if conversations.loading}
+    {#if conversations.pagination.loading}
       <div
         role="status"
         class="flex items-center justify-center gap-2 p-5 text-sm text-gray-500"
       >
         <Spinner size="4" />Loading chats…
       </div>
-    {:else if conversations.error}
+    {:else if conversations.pagination.error}
       <div class="space-y-3 p-4">
-        <Alert color="red" role="alert">{conversations.error}</Alert><Button
+        <Alert color="red" role="alert">{conversations.pagination.error}</Alert
+        ><Button
           size="sm"
-          onclick={() => onLoad(conversations.failedLoadMore)}>Try again</Button
+          onclick={() => onLoad(conversations.pagination.failedMode === 'next')}
+          >Try again</Button
         >
       </div>
     {:else if conversations.items.length === 0}
@@ -78,7 +80,7 @@
           Find a user to start a conversation.
         </p>
       </div>
-    {:else if conversations.nextCursor}
+    {:else if conversations.pagination.nextCursor}
       <InfiniteScroll onLoad={() => onLoad(true)} />
     {/if}
   </div>

@@ -45,7 +45,8 @@
   }
 
   async function older() {
-    if (messages.loading || loadingOlderId === conversation.id) return;
+    if (messages.pagination.loading || loadingOlderId === conversation.id)
+      return;
     const id = conversation.id;
     loadingOlderId = id;
     const height = scroller.scrollHeight;
@@ -63,7 +64,7 @@
   $effect(() => {
     const id = conversation.id;
     const last = messages.items.at(-1);
-    const loading = messages.loading;
+    const loading = messages.pagination.loading;
     untrack(() => {
       const generation = ++scrollGeneration;
       if (previousConversation !== id) {
@@ -120,24 +121,26 @@
     class="h-full overflow-y-auto overscroll-contain px-4 py-5 md:px-8"
     aria-label="Messages"
   >
-    {#if messages.nextCursor}<div class="mb-4 text-center">
+    {#if messages.pagination.nextCursor}<div class="mb-4 text-center">
         <Button
           color="alternative"
           size="xs"
-          disabled={messages.loading}
+          disabled={messages.pagination.loading}
           onclick={older}>Load older messages</Button
         >
       </div>{/if}
-    {#if messages.loading}<div
+    {#if messages.pagination.loading}<div
         role="status"
         class="flex justify-center gap-2 p-3 text-sm text-gray-500"
       >
         <Spinner size="4" />Loading messages…
       </div>{/if}
-    {#if messages.error}<div class="mx-auto mb-4 max-w-md space-y-2">
-        <Alert color="red" role="alert">{messages.error}</Alert><Button
+    {#if messages.pagination.error}<div class="mx-auto mb-4 max-w-md space-y-2">
+        <Alert color="red" role="alert">{messages.pagination.error}</Alert
+        ><Button
           size="sm"
-          onclick={() => (messages.failedLoadMore ? older() : onLoad())}
+          onclick={() =>
+            messages.pagination.failedMode === 'next' ? older() : onLoad()}
           >Try again</Button
         >
       </div>{/if}
@@ -172,7 +175,7 @@
         </li>
       {/each}
     </ol>
-    {#if !messages.loading && !messages.error && messages.items.length === 0}<p
+    {#if !messages.pagination.loading && !messages.pagination.error && messages.items.length === 0}<p
         class="py-12 text-center text-sm text-gray-500"
       >
         No messages yet. Send the first message.

@@ -1,3 +1,4 @@
+import { CursorPaginationStore, type CursorPaginationState } from '@shared/lib';
 import type { Conversation } from '@chat/contracts/conversations';
 import type { Message } from '@chat/contracts/messages';
 
@@ -10,37 +11,15 @@ export type ReadonlyConversation = Readonly<
 
 export type ConversationsState = {
   readonly items: readonly ReadonlyConversation[];
-  readonly nextCursor: string | null;
-  readonly loading: boolean;
-  readonly error: string;
-  readonly failedLoadMore: boolean;
+  readonly pagination: CursorPaginationState;
 };
 
 export class ConversationsStore implements ConversationsState {
   private currentItems = $state.raw<Conversation[]>([]);
-  private cursor = $state<string | null>(null);
-  private pending = $state(false);
-  private failure = $state('');
-  private failedMore = $state(false);
+  readonly pagination = new CursorPaginationStore();
 
   get items(): ConversationsState['items'] {
     return this.currentItems;
-  }
-
-  get nextCursor() {
-    return this.cursor;
-  }
-
-  get loading() {
-    return this.pending;
-  }
-
-  get error() {
-    return this.failure;
-  }
-
-  get failedLoadMore() {
-    return this.failedMore;
   }
 
   upsert(conversation: Conversation) {
@@ -78,7 +57,6 @@ export class ConversationsStore implements ConversationsState {
 
   receivePage(
     items: Conversation[],
-    nextCursor: string | null,
     more: boolean,
     eventIds: ReadonlySet<string>,
   ) {
@@ -89,27 +67,10 @@ export class ConversationsStore implements ConversationsState {
       const ids = new Set([...items.map((item) => item.id), ...eventIds]);
       this.currentItems = this.currentItems.filter((item) => ids.has(item.id));
     }
-    this.cursor = nextCursor;
-    this.pending = false;
-  }
-
-  beginLoad() {
-    this.pending = true;
-    this.failure = '';
-    this.failedMore = false;
-  }
-
-  failLoad(more: boolean) {
-    this.pending = false;
-    this.failedMore = more;
-    this.failure = 'Unable to load conversations. Please try again';
   }
 
   clear() {
     this.currentItems = [];
-    this.cursor = null;
-    this.pending = false;
-    this.failure = '';
-    this.failedMore = false;
+    this.pagination.reset();
   }
 }

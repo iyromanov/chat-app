@@ -125,33 +125,106 @@ test('local user search browses, paginates, retries failures and distinguishes e
     json(response, { items: [bob], nextCursor: 'next-users' }),
   );
   const first = users.load();
-  assert.equal(users.loading, true);
+  assert.equal(users.pagination.loading, true);
   await first;
   assert.deepEqual(users.items, [bob]);
-  assert.equal(users.nextCursor, 'next-users');
+  assert.equal(users.pagination.nextCursor, 'next-users');
   routes.set('/api/users?search=&cursor=next-users', (response) =>
     json(response, { message: 'Unavailable' }, 503),
   );
   await users.load(true);
-  assert.equal(users.error, 'Unable to find users. Please try again');
-  assert.equal(users.loading, false);
+  assert.equal(
+    users.pagination.error,
+    'Unable to find users. Please try again',
+  );
+  assert.equal(users.pagination.loading, false);
   assert.deepEqual(users.items, [bob]);
-  assert.equal(users.nextCursor, 'next-users');
+  assert.equal(users.pagination.nextCursor, 'next-users');
+  assert.equal(users.pagination.failedMode, 'next');
   routes.set('/api/users?search=&cursor=next-users', (response) =>
     json(response, { items: [bob, carol], nextCursor: null }),
   );
   await users.load(true);
-  assert.equal(users.error, '');
+  assert.equal(users.pagination.error, '');
   assert.deepEqual(users.items, [bob, carol]);
-  assert.equal(users.nextCursor, null);
+  assert.equal(users.pagination.nextCursor, null);
   routes.set('/api/users?search=nobody', (response) =>
     json(response, { items: [], nextCursor: null }),
   );
   users.change('nobody');
   assert.deepEqual(users.items, []);
-  await until(() => !users.loading);
-  assert.equal(users.error, '');
+  await until(() => !users.pagination.loading);
+  assert.equal(users.pagination.error, '');
   assert.deepEqual(users.items, []);
+});
+
+test('cursor lists block concurrent load-more requests and stop at the last page', async (t) => {
+  for (const kind of ['users', 'messages', 'conversations']) {
+    await t.test(kind, async (t) => {
+      const { app, routes, requests, sockets } = await fixture(t);
+      const paths = {
+        users: '/api/users?search=',
+        messages: `/api/conversations/${conversation.id}/messages`,
+        conversations: '/api/conversations',
+      };
+      const items = {
+        users: conversation.counterpart,
+        messages: message,
+        conversations: conversation,
+      };
+      const path = paths[kind];
+      const item = items[kind];
+      routes.set(path, (response) =>
+        json(response, { items: [item], nextCursor: 'next-page' }),
+      );
+      const context = await signIn(app);
+      await until(
+        () =>
+          sockets.length === 1 &&
+          context.connectionState === 'Connected' &&
+          !context.chat.conversations.pagination.loading,
+      );
+      const users = createUserSearch(context.chat.searchUsers);
+      t.after(users.dispose);
+      if (kind === 'users') await users.load();
+      if (kind === 'messages')
+        await context.chat.openConversation(conversation.id);
+      const lists = {
+        users: { state: users, load: (more) => users.load(more) },
+        messages: {
+          state: context.chat.messages,
+          load: context.chat.loadMessages,
+        },
+        conversations: {
+          state: context.chat.conversations,
+          load: context.chat.loadConversations,
+        },
+      };
+      const { state, load } = lists[kind];
+      const nextPath = `${path}${kind === 'users' ? '&' : '?'}cursor=next-page`;
+      const started = deferred();
+      const ready = deferred();
+      t.after(() => ready.resolve());
+      routes.set(nextPath, async (response) => {
+        started.resolve();
+        await ready.promise;
+        json(response, { items: [item], nextCursor: null });
+      });
+      const next = load(true);
+      await started.promise;
+      await Promise.all([load(true), load(true)]);
+      assert.equal(state.pagination.loading, true);
+      ready.resolve();
+      await next;
+      assert.equal(requests.filter((url) => url === nextPath).length, 1);
+      assert.deepEqual(state.items, [item]);
+      assert.equal(state.pagination.nextCursor, null);
+      const count = requests.length;
+      await load(true);
+      assert.equal(requests.length, count);
+      assert.equal(state.pagination.loading, false);
+    });
+  }
 });
 
 test('a changed search ignores old first pages, pagination and failures', async (t) => {
@@ -193,15 +266,15 @@ test('a changed search ignores old first pages, pagination and failures', async 
       );
       users.change('cA');
       assert.deepEqual(users.items, []);
-      assert.equal(users.nextCursor, null);
-      await until(() => !users.loading);
+      assert.equal(users.pagination.nextCursor, null);
+      await until(() => !users.pagination.loading);
       ready.resolve();
       await old;
       assert.equal(users.search, 'cA');
       assert.deepEqual(users.items, [carol]);
-      assert.equal(users.nextCursor, null);
-      assert.equal(users.error, '');
-      assert.equal(users.loading, false);
+      assert.equal(users.pagination.nextCursor, null);
+      assert.equal(users.pagination.error, '');
+      assert.equal(users.pagination.loading, false);
     });
   }
 });
@@ -212,8 +285,11 @@ test('search failures can retry the first page and disposed UI ignores pending r
   const users = createUserSearch(context.chat.searchUsers);
   routes.set('/api/users?search=', (response) => response.destroy());
   await users.load();
-  assert.equal(users.loading, false);
-  assert.equal(users.error, 'Unable to find users. Please try again');
+  assert.equal(users.pagination.loading, false);
+  assert.equal(
+    users.pagination.error,
+    'Unable to find users. Please try again',
+  );
   const started = deferred();
   const ready = deferred();
   routes.set('/api/users?search=', async (response) => {
@@ -222,7 +298,7 @@ test('search failures can retry the first page and disposed UI ignores pending r
     json(response, { items: [conversation.counterpart], nextCursor: null });
   });
   const retry = users.load();
-  assert.equal(users.error, '');
+  assert.equal(users.pagination.error, '');
   await started.promise;
   users.dispose();
   ready.resolve();
@@ -261,7 +337,7 @@ test('search results and unauthorized responses from a previous login cannot ent
       assert.equal(app.context, current);
       assert.equal(app.auth.state.status, 'authenticated');
       assert.deepEqual(users.items, []);
-      assert.equal(users.error, '');
+      assert.equal(users.pagination.error, '');
       await assert.rejects(previous.chat.searchUsers(''), /chat has ended/);
     });
   }
@@ -271,7 +347,8 @@ test('starting and reopening a conversation updates its list and opens saved his
   const { app, routes, sockets } = await fixture(t);
   const context = await signIn(app);
   await until(
-    () => sockets.length === 1 && !context.chat.conversations.loading,
+    () =>
+      sockets.length === 1 && !context.chat.conversations.pagination.loading,
   );
   const bodies = [];
   routes.set('/api/conversations', async (response, request) => {
@@ -290,7 +367,7 @@ test('starting and reopening a conversation updates its list and opens saved his
   );
   assert.deepEqual(context.chat.conversations.items, [conversation]);
   assert.equal(context.chat.messages.conversationId, conversation.id);
-  await until(() => !context.chat.messages.loading);
+  await until(() => !context.chat.messages.pagination.loading);
   assert.deepEqual(context.chat.messages.items, [message]);
   await context.chat.startConversation(conversation.counterpart.id);
   assert.deepEqual(context.chat.conversations.items, [conversation]);
@@ -307,7 +384,9 @@ test('a delayed start cannot override a later conversation selection or start', 
       const { app, routes, sockets } = await fixture(t);
       const context = await signIn(app);
       await until(
-        () => sockets.length === 1 && !context.chat.conversations.loading,
+        () =>
+          sockets.length === 1 &&
+          !context.chat.conversations.pagination.loading,
       );
       const other = {
         ...conversation,
@@ -357,7 +436,7 @@ test('a delayed start cannot override a later conversation selection or start', 
       ready.resolve();
       assert.deepEqual(await old, phase === 'history' ? conversation : null);
       assert.equal(context.chat.messages.conversationId, other.id);
-      await until(() => !context.chat.messages.loading);
+      await until(() => !context.chat.messages.pagination.loading);
       assert.deepEqual(context.chat.messages.items, [otherMessage]);
     });
   }
@@ -367,7 +446,8 @@ test('failed starts preserve the selected history and late starts cannot enter a
   const { app, routes, sockets } = await fixture(t);
   const previous = await signIn(app);
   await until(
-    () => sockets.length === 1 && !previous.chat.conversations.loading,
+    () =>
+      sockets.length === 1 && !previous.chat.conversations.pagination.loading,
   );
   const path = `/api/conversations/${conversation.id}/messages`;
   routes.set(path, (response) =>
@@ -416,7 +496,8 @@ test('an empty conversation survives a stale list refresh and can exchange messa
   const { app, routes, sockets } = await fixture(t);
   const context = await signIn(app);
   await until(
-    () => sockets.length === 1 && !context.chat.conversations.loading,
+    () =>
+      sockets.length === 1 && !context.chat.conversations.pagination.loading,
   );
   const listStarted = deferred();
   const listReady = deferred();
@@ -609,7 +690,7 @@ test('logout failures preserve the current context; an unauthorized response end
     () =>
       sockets.length === 1 &&
       context.connectionState === 'Connected' &&
-      !context.chat.conversations.loading,
+      !context.chat.conversations.pagination.loading,
   );
   context.chat.conversationCreated(conversation);
   for (const failure of ['server', 'network']) {
@@ -730,13 +811,13 @@ test('restoration, socket events and reconnect share chat synchronization', asyn
     () =>
       sockets.length === 1 &&
       context.connectionState === 'Connected' &&
-      !context.chat.conversations.loading,
+      !context.chat.conversations.pagination.loading,
   );
   const socket = sockets[0];
   socket.emit('conversation:created', conversation);
   await until(() => context.chat.conversations.items.length === 1);
   context.chat.openConversation(conversation.id);
-  await until(() => !context.chat.messages.loading);
+  await until(() => !context.chat.messages.pagination.loading);
   socket.emit('message:created', message);
   await until(() => context.chat.messages.items.length === 1);
   context.chat.applySavedMessage(message);
@@ -824,7 +905,7 @@ test('a new login isolates late HTTP failures, logout responses and store loads'
     () =>
       sockets.length === 2 &&
       !sockets[0].connected &&
-      !current.chat.conversations.loading,
+      !current.chat.conversations.pagination.loading,
   );
   assert.equal(sockets[0].connected, false);
   assert.equal(app.auth.state.status, 'authenticated');
@@ -1053,7 +1134,7 @@ test('initial load and first-page refresh merge live events and reset the older 
   socket.emit('message:created', live);
   await until(() => context.chat.messages.items.length === 1);
   initialReady.resolve();
-  await until(() => !context.chat.messages.loading);
+  await until(() => !context.chat.messages.pagination.loading);
   assert.deepEqual(
     context.chat.messages.items.map((item) => item.id),
     [message.id, live.id],
@@ -1089,18 +1170,18 @@ test('initial load and first-page refresh merge live events and reset the older 
   socket.emit('message:created', boundary);
   await until(() => context.chat.messages.items.length === 3);
   recoveryReady.resolve();
-  await until(() => !context.chat.messages.loading);
+  await until(() => !context.chat.messages.pagination.loading);
   assert.deepEqual(
     context.chat.messages.items.map((item) => item.id),
     [live.id, boundary.id],
   );
-  assert.equal(context.chat.messages.nextCursor, 'new-page');
+  assert.equal(context.chat.messages.pagination.nextCursor, 'new-page');
   await context.chat.loadMessages(true);
   assert.deepEqual(
     context.chat.messages.items.map((item) => item.id),
     [message.id, missed.id, live.id, boundary.id],
   );
-  assert.equal(context.chat.messages.nextCursor, 'older-reconciled');
+  assert.equal(context.chat.messages.pagination.nextCursor, 'older-reconciled');
 });
 
 test('logout during recovery discards late pages and never restarts private loads', async (t) => {
@@ -1111,7 +1192,7 @@ test('logout during recovery discards late pages and never restarts private load
     json(response, { items: [message], nextCursor: null }),
   );
   context.chat.openConversation(conversation.id);
-  await until(() => !context.chat.messages.loading);
+  await until(() => !context.chat.messages.pagination.loading);
   const started = deferred();
   const ready = deferred();
   routes.set(path, (response) => {
@@ -1155,7 +1236,7 @@ test('conversation refresh resets to its first page and keeps newer live activit
     () =>
       sockets.length === 1 &&
       context.connectionState === 'Connected' &&
-      !context.chat.conversations.loading,
+      !context.chat.conversations.pagination.loading,
   );
   await context.chat.loadConversations(true);
   const started = deferred();
@@ -1189,19 +1270,22 @@ test('conversation refresh resets to its first page and keeps newer live activit
     () => context.chat.conversations.items[0].lastMessage?.id === newer.id,
   );
   ready.resolve();
-  await until(() => !context.chat.conversations.loading);
+  await until(() => !context.chat.conversations.pagination.loading);
   assert.deepEqual(
     context.chat.conversations.items.map((item) => item.id),
     [older.id],
   );
   assert.equal(context.chat.conversations.items[0].lastMessage.id, newer.id);
-  assert.equal(context.chat.conversations.nextCursor, 'refresh-rest');
+  assert.equal(
+    context.chat.conversations.pagination.nextCursor,
+    'refresh-rest',
+  );
   await context.chat.loadConversations(true);
   assert.deepEqual(
     context.chat.conversations.items.map((item) => item.id),
     [older.id, conversation.id],
   );
-  assert.equal(context.chat.conversations.nextCursor, null);
+  assert.equal(context.chat.conversations.pagination.nextCursor, null);
 });
 
 test('refresh reconciles late commits in its latest page and discards previously loaded older history', async (t) => {
@@ -1211,7 +1295,7 @@ test('refresh reconciles late commits in its latest page and discards previously
     () =>
       sockets.length === 1 &&
       context.connectionState === 'Connected' &&
-      !context.chat.conversations.loading,
+      !context.chat.conversations.pagination.loading,
   );
   const path = `/api/conversations/${conversation.id}/messages`;
   const newest = {
@@ -1228,7 +1312,7 @@ test('refresh reconciles late commits in its latest page and discards previously
     json(response, { items: [message, newest], nextCursor: 'older-original' }),
   );
   context.chat.openConversation(conversation.id);
-  await until(() => !context.chat.messages.loading);
+  await until(() => !context.chat.messages.pagination.loading);
   assert.deepEqual(
     context.chat.messages.items.map((item) => item.id),
     [message.id, newest.id],
@@ -1249,7 +1333,7 @@ test('refresh reconciles late commits in its latest page and discards previously
     context.chat.messages.items.map((item) => item.id),
     [message.id, late.id, newest.id],
   );
-  assert.equal(context.chat.messages.nextCursor, 'older-refreshed');
+  assert.equal(context.chat.messages.pagination.nextCursor, 'older-refreshed');
   assert.equal(
     requests.some((url) => url.includes('older-refreshed')),
     false,
@@ -1291,7 +1375,10 @@ test('refresh reconciles late commits in its latest page and discards previously
     context.chat.messages.items.map((item) => item.id),
     [message.id, late.id, newest.id],
   );
-  assert.equal(context.chat.messages.nextCursor, 'loaded-older-page');
+  assert.equal(
+    context.chat.messages.pagination.nextCursor,
+    'loaded-older-page',
+  );
   assert.equal(
     requests.some((url) => url.includes('loaded-older-page')),
     false,
@@ -1301,7 +1388,7 @@ test('refresh reconciles late commits in its latest page and discards previously
     context.chat.messages.items.map((item) => item.id),
     [older.id, lateInOlderPage.id, message.id, late.id, newest.id],
   );
-  assert.equal(context.chat.messages.nextCursor, 'unloaded-history');
+  assert.equal(context.chat.messages.pagination.nextCursor, 'unloaded-history');
   assert.equal(
     requests.some((url) => url.includes('unloaded-history')),
     false,
@@ -1315,7 +1402,7 @@ test('refresh loads only the latest 50 missed messages and leaves the rest for L
     () =>
       sockets.length === 1 &&
       context.connectionState === 'Connected' &&
-      !context.chat.conversations.loading,
+      !context.chat.conversations.pagination.loading,
   );
   const path = `/api/conversations/${conversation.id}/messages`;
   const missed = Array.from({ length: 105 }, (_, index) => ({
@@ -1336,7 +1423,7 @@ test('refresh loads only the latest 50 missed messages and leaves the rest for L
   sockets[0].emit('message:created', missed[104]);
   await until(() => context.chat.messages.items.length === 1);
   initialReady.resolve();
-  await until(() => !context.chat.messages.loading);
+  await until(() => !context.chat.messages.pagination.loading);
 
   routes.set(path, (response) =>
     json(response, { items: missed.slice(55), nextCursor: 'middle' }),
@@ -1349,13 +1436,13 @@ test('refresh loads only the latest 50 missed messages and leaves the rest for L
   );
   await context.chat.loadMessages();
   assert.deepEqual(context.chat.messages.items, missed.slice(55));
-  assert.equal(context.chat.messages.nextCursor, 'middle');
+  assert.equal(context.chat.messages.pagination.nextCursor, 'middle');
   await context.chat.loadMessages(true);
   assert.deepEqual(context.chat.messages.items, missed.slice(5));
-  assert.equal(context.chat.messages.nextCursor, 'oldest');
+  assert.equal(context.chat.messages.pagination.nextCursor, 'oldest');
   await context.chat.loadMessages(true);
   assert.deepEqual(context.chat.messages.items, missed);
-  assert.equal(context.chat.messages.nextCursor, null);
+  assert.equal(context.chat.messages.pagination.nextCursor, null);
 });
 
 function requestBody(request) {
@@ -1373,7 +1460,7 @@ test('ordinary sends merge HTTP and WS by server ID in either order and preserve
     () =>
       sockets.length === 1 &&
       context.connectionState === 'Connected' &&
-      !context.chat.conversations.loading,
+      !context.chat.conversations.pagination.loading,
   );
   context.chat.conversationCreated(conversation);
   const other = { ...conversation, id: '888888888888888888888888' };
@@ -1384,7 +1471,7 @@ test('ordinary sends merge HTTP and WS by server ID in either order and preserve
       return json(response, { items: [], nextCursor: null });
   });
   context.chat.openConversation(conversation.id);
-  await until(() => !context.chat.messages.loading);
+  await until(() => !context.chat.messages.pagination.loading);
   const bodies = [];
   const saved = { ...message, senderId: user.id };
   const received = deferred();
@@ -1438,7 +1525,7 @@ test('a lost send response remains an error even when WS delivers it and a new s
     () =>
       sockets.length === 1 &&
       context.connectionState === 'Connected' &&
-      !context.chat.conversations.loading,
+      !context.chat.conversations.pagination.loading,
   );
   context.chat.conversationCreated(conversation);
   const path = `/api/conversations/${conversation.id}/messages`;
@@ -1454,7 +1541,7 @@ test('a lost send response remains an error even when WS delivers it and a new s
     json(response, second, 201);
   });
   context.chat.openConversation(conversation.id);
-  await until(() => !context.chat.messages.loading);
+  await until(() => !context.chat.messages.pagination.loading);
   await assert.rejects(context.chat.sendMessage(conversation.id, 'Hello'));
   await until(() => context.chat.messages.items.length === 1);
   await delay(50);
@@ -1497,7 +1584,7 @@ test('a late send updates its own preview after switching history and cannot cha
     () =>
       sockets.length === 1 &&
       context.connectionState === 'Connected' &&
-      !context.chat.conversations.loading,
+      !context.chat.conversations.pagination.loading,
   );
   context.chat.conversationCreated(conversation);
   const other = { ...conversation, id: '888888888888888888888888' };
@@ -1552,7 +1639,7 @@ test('switching conversations clears history immediately and ignores late succes
     () =>
       sockets.length === 1 &&
       context.connectionState === 'Connected' &&
-      !context.chat.conversations.loading,
+      !context.chat.conversations.pagination.loading,
   );
   const other = { ...conversation, id: '888888888888888888888888' };
   const otherMessage = { ...message, conversationId: other.id };
@@ -1580,12 +1667,12 @@ test('switching conversations clears history immediately and ignores late succes
     const opening = context.chat.openConversation(other.id);
     assert.equal(context.chat.messages.conversationId, other.id);
     assert.deepEqual(context.chat.messages.items, []);
-    assert.equal(context.chat.messages.loading, true);
-    assert.equal(context.chat.messages.nextCursor, null);
+    assert.equal(context.chat.messages.pagination.loading, true);
+    assert.equal(context.chat.messages.pagination.nextCursor, null);
     ready.resolve();
     await stale;
-    assert.equal(context.chat.messages.loading, true);
-    assert.equal(context.chat.messages.error, '');
+    assert.equal(context.chat.messages.pagination.loading, true);
+    assert.equal(context.chat.messages.pagination.error, '');
     otherReady.resolve();
     await opening;
     assert.deepEqual(context.chat.messages.items, [otherMessage]);
@@ -1606,20 +1693,20 @@ test('initial history failure can retry an empty result and background errors pr
     () =>
       sockets.length === 1 &&
       context.connectionState === 'Connected' &&
-      !context.chat.conversations.loading,
+      !context.chat.conversations.pagination.loading,
   );
   const path = `/api/conversations/${conversation.id}/messages`;
   const fail = (response) => json(response, { message: 'Unavailable' }, 503);
   routes.set(path, fail);
   await context.chat.openConversation(conversation.id);
-  assert.equal(context.chat.messages.loading, false);
-  assert.ok(context.chat.messages.error);
+  assert.equal(context.chat.messages.pagination.loading, false);
+  assert.ok(context.chat.messages.pagination.error);
   assert.deepEqual(context.chat.messages.items, []);
   routes.set(path, (response) =>
     json(response, { items: [], nextCursor: null }),
   );
   await context.chat.loadMessages();
-  assert.equal(context.chat.messages.error, '');
+  assert.equal(context.chat.messages.pagination.error, '');
   assert.deepEqual(context.chat.messages.items, []);
   routes.set(path, (response) =>
     json(response, { items: [message], nextCursor: 'old-history' }),
@@ -1631,17 +1718,17 @@ test('initial history failure can retry an empty result and background errors pr
     context.chat.loadMessages(true),
     context.chat.loadConversations(true),
   ]);
-  assert.equal(context.chat.messages.failedLoadMore, true);
-  assert.equal(context.chat.conversations.failedLoadMore, true);
-  assert.equal(context.chat.messages.nextCursor, 'old-history');
-  assert.equal(context.chat.conversations.nextCursor, 'old-list');
+  assert.equal(context.chat.messages.pagination.failedMode, 'next');
+  assert.equal(context.chat.conversations.pagination.failedMode, 'next');
+  assert.equal(context.chat.messages.pagination.nextCursor, 'old-history');
+  assert.equal(context.chat.conversations.pagination.nextCursor, 'old-list');
   routes.set(path, fail);
   routes.set('/api/conversations', fail);
   await context.chat.refresh();
-  assert.equal(context.chat.messages.failedLoadMore, false);
-  assert.equal(context.chat.conversations.failedLoadMore, false);
-  assert.ok(context.chat.messages.error);
-  assert.ok(context.chat.conversations.error);
+  assert.equal(context.chat.messages.pagination.failedMode, 'first');
+  assert.equal(context.chat.conversations.pagination.failedMode, 'first');
+  assert.ok(context.chat.messages.pagination.error);
+  assert.ok(context.chat.conversations.pagination.error);
   assert.deepEqual(context.chat.messages.items, [message]);
   assert.deepEqual(context.chat.conversations.items, [conversation]);
   assert.equal(app.context, context);
@@ -1653,86 +1740,101 @@ test('initial history failure can retry an empty result and background errors pr
     json(response, { items: [], nextCursor: null }),
   );
   await context.chat.refresh();
-  assert.equal(context.chat.messages.error, '');
-  assert.equal(context.chat.conversations.error, '');
+  assert.equal(context.chat.messages.pagination.error, '');
+  assert.equal(context.chat.conversations.pagination.error, '');
   assert.deepEqual(context.chat.messages.items, []);
   assert.deepEqual(context.chat.conversations.items, []);
-  assert.equal(context.chat.messages.nextCursor, null);
-  assert.equal(context.chat.conversations.nextCursor, null);
+  assert.equal(context.chat.messages.pagination.nextCursor, null);
+  assert.equal(context.chat.conversations.pagination.nextCursor, null);
 });
 
 test('refresh supersedes in-flight pagination and dispose invalidates pending history and list responses', async (t) => {
-  const { app, routes, sockets } = await fixture(t);
-  const path = `/api/conversations/${conversation.id}/messages`;
-  routes.set(path, (response) =>
-    json(response, { items: [message], nextCursor: 'old-history' }),
-  );
-  routes.set('/api/conversations', (response) =>
-    json(response, { items: [conversation], nextCursor: 'old-list' }),
-  );
-  const context = await signIn(app);
-  await until(
-    () =>
-      sockets.length === 1 &&
-      context.connectionState === 'Connected' &&
-      !context.chat.conversations.loading,
-  );
-  await context.chat.openConversation(conversation.id);
-  const ready = deferred();
-  const historyStarted = deferred();
-  const listStarted = deferred();
-  routes.set(`${path}?cursor=old-history`, async (response) => {
-    historyStarted.resolve();
-    await ready.promise;
-    json(response, { items: [message], nextCursor: 'obsolete-history' });
-  });
-  routes.set('/api/conversations?cursor=old-list', async (response) => {
-    listStarted.resolve();
-    await ready.promise;
-    json(response, { items: [conversation], nextCursor: 'obsolete-list' });
-  });
-  const old = Promise.all([
-    context.chat.loadMessages(true),
-    context.chat.loadConversations(true),
-  ]);
-  await Promise.all([historyStarted.promise, listStarted.promise]);
-  routes.set(path, (response) =>
-    json(response, { items: [], nextCursor: 'new-history' }),
-  );
-  routes.set('/api/conversations', (response) =>
-    json(response, { items: [], nextCursor: 'new-list' }),
-  );
-  await context.chat.refresh();
-  ready.resolve();
-  await old;
-  assert.deepEqual(context.chat.messages.items, []);
-  assert.deepEqual(context.chat.conversations.items, []);
-  assert.equal(context.chat.messages.nextCursor, 'new-history');
-  assert.equal(context.chat.conversations.nextCursor, 'new-list');
-  const lateReady = deferred();
-  const lateHistoryStarted = deferred();
-  const lateListStarted = deferred();
-  routes.set(path, async (response) => {
-    lateHistoryStarted.resolve();
-    await lateReady.promise;
-    json(response, { items: [message], nextCursor: 'late' });
-  });
-  routes.set('/api/conversations', async (response) => {
-    lateListStarted.resolve();
-    await lateReady.promise;
-    json(response, { items: [conversation], nextCursor: 'late' });
-  });
-  const late = context.chat.refresh();
-  await Promise.all([lateHistoryStarted.promise, lateListStarted.promise]);
-  app.dispose();
-  lateReady.resolve();
-  await late;
-  assert.deepEqual(context.chat.messages.items, []);
-  assert.deepEqual(context.chat.conversations.items, []);
-  assert.equal(context.chat.messages.nextCursor, null);
-  assert.equal(context.chat.conversations.nextCursor, null);
-  assert.equal(context.chat.messages.loading, false);
-  assert.equal(context.chat.conversations.loading, false);
+  for (const status of [200, 503]) {
+    await t.test(`late response ${status}`, async (t) => {
+      const { app, routes, sockets } = await fixture(t);
+      const path = `/api/conversations/${conversation.id}/messages`;
+      routes.set(path, (response) =>
+        json(response, { items: [message], nextCursor: 'old-history' }),
+      );
+      routes.set('/api/conversations', (response) =>
+        json(response, { items: [conversation], nextCursor: 'old-list' }),
+      );
+      const context = await signIn(app);
+      await until(
+        () =>
+          sockets.length === 1 &&
+          context.connectionState === 'Connected' &&
+          !context.chat.conversations.pagination.loading,
+      );
+      await context.chat.openConversation(conversation.id);
+      const ready = deferred();
+      const historyStarted = deferred();
+      const listStarted = deferred();
+      routes.set(`${path}?cursor=old-history`, async (response) => {
+        historyStarted.resolve();
+        await ready.promise;
+        json(
+          response,
+          { items: [message], nextCursor: 'obsolete-history' },
+          status,
+        );
+      });
+      routes.set('/api/conversations?cursor=old-list', async (response) => {
+        listStarted.resolve();
+        await ready.promise;
+        json(
+          response,
+          { items: [conversation], nextCursor: 'obsolete-list' },
+          status,
+        );
+      });
+      const old = Promise.all([
+        context.chat.loadMessages(true),
+        context.chat.loadConversations(true),
+      ]);
+      await Promise.all([historyStarted.promise, listStarted.promise]);
+      routes.set(path, (response) =>
+        json(response, { items: [], nextCursor: 'new-history' }),
+      );
+      routes.set('/api/conversations', (response) =>
+        json(response, { items: [], nextCursor: 'new-list' }),
+      );
+      await context.chat.refresh();
+      ready.resolve();
+      await old;
+      assert.deepEqual(context.chat.messages.items, []);
+      assert.deepEqual(context.chat.conversations.items, []);
+      assert.equal(context.chat.messages.pagination.nextCursor, 'new-history');
+      assert.equal(
+        context.chat.conversations.pagination.nextCursor,
+        'new-list',
+      );
+      const lateReady = deferred();
+      const lateHistoryStarted = deferred();
+      const lateListStarted = deferred();
+      routes.set(path, async (response) => {
+        lateHistoryStarted.resolve();
+        await lateReady.promise;
+        json(response, { items: [message], nextCursor: 'late' });
+      });
+      routes.set('/api/conversations', async (response) => {
+        lateListStarted.resolve();
+        await lateReady.promise;
+        json(response, { items: [conversation], nextCursor: 'late' });
+      });
+      const late = context.chat.refresh();
+      await Promise.all([lateHistoryStarted.promise, lateListStarted.promise]);
+      app.dispose();
+      lateReady.resolve();
+      await late;
+      assert.deepEqual(context.chat.messages.items, []);
+      assert.deepEqual(context.chat.conversations.items, []);
+      assert.equal(context.chat.messages.pagination.nextCursor, null);
+      assert.equal(context.chat.conversations.pagination.nextCursor, null);
+      assert.equal(context.chat.messages.pagination.loading, false);
+      assert.equal(context.chat.conversations.pagination.loading, false);
+    });
+  }
 });
 
 test('reconnect and returning to a visible tab replace loaded ranges and paginate from new cursors', async (t) => {
@@ -1763,7 +1865,7 @@ test('reconnect and returning to a visible tab replace loaded ranges and paginat
         () =>
           sockets.length === 1 &&
           context.connectionState === 'Connected' &&
-          !context.chat.conversations.loading,
+          !context.chat.conversations.pagination.loading,
       );
       await context.chat.openConversation(conversation.id);
       await Promise.all([
@@ -1816,8 +1918,8 @@ test('reconnect and returning to a visible tab replace loaded ranges and paginat
       }
       await until(
         () =>
-          context.chat.messages.nextCursor === 'new-history' &&
-          context.chat.conversations.nextCursor === 'new-list',
+          context.chat.messages.pagination.nextCursor === 'new-history' &&
+          context.chat.conversations.pagination.nextCursor === 'new-list',
       );
       assert.deepEqual(context.chat.messages.items, [newest]);
       assert.equal(context.chat.conversations.items.length, 1);
@@ -1851,8 +1953,8 @@ test('reconnect and returning to a visible tab replace loaded ranges and paginat
         context.chat.conversations.items[0].lastMessage.id,
         newest.id,
       );
-      assert.equal(context.chat.messages.nextCursor, null);
-      assert.equal(context.chat.conversations.nextCursor, null);
+      assert.equal(context.chat.messages.pagination.nextCursor, null);
+      assert.equal(context.chat.conversations.pagination.nextCursor, null);
       const live = { ...newest, id: '666666666666666666666666' };
       const connected = sockets.at(-1);
       connected.emit('message:created', live);

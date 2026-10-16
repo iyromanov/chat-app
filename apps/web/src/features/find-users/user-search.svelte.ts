@@ -1,17 +1,12 @@
 import type { PublicUser, UsersPage } from '@chat/contracts/users';
+import { CursorPaginationStore, loadCursorPage } from '@shared/lib';
 
 class UserSearch {
-  private generation = 0;
-
   search = $state('');
 
   items = $state.raw<PublicUser[]>([]);
 
-  nextCursor = $state<string | null>(null);
-
-  loading = $state(false);
-
-  error = $state('');
+  readonly pagination = new CursorPaginationStore();
 
   constructor(
     private readonly searchUsers: (
@@ -21,42 +16,34 @@ class UserSearch {
   ) {}
 
   change = (search: string) => {
-    this.generation++;
     this.search = search;
     this.items = [];
-    this.nextCursor = null;
-    this.loading = false;
+    this.pagination.reset();
     this.load();
   };
 
   dispose = () => {
-    this.generation++;
+    this.pagination.dispose();
   };
 
   load = async (more = false) => {
-    if (this.loading || (more && !this.nextCursor)) return;
-    const generation = this.generation;
-    this.loading = true;
-    this.error = '';
-    try {
-      const data = await this.searchUsers(
-        this.search,
-        more ? this.nextCursor! : undefined,
-      );
-      if (generation !== this.generation) return;
-      this.items = [
-        ...this.items,
-        ...data.items.filter(
-          (user) => !this.items.some((item) => item.id === user.id),
-        ),
-      ];
-      this.nextCursor = data.nextCursor;
-    } catch {
-      if (generation === this.generation)
-        this.error = 'Unable to find users. Please try again';
-    } finally {
-      if (generation === this.generation) this.loading = false;
-    }
+    if (this.pagination.loading) return;
+    const search = this.search;
+    await loadCursorPage({
+      pagination: this.pagination,
+      mode: more ? 'next' : 'first',
+      fetchPage: (cursor) => this.searchUsers(search, cursor),
+      applyPage: (page, mode) => {
+        const current = mode === 'next' ? this.items : [];
+        this.items = [
+          ...current,
+          ...page.items.filter(
+            (user) => !current.some((item) => item.id === user.id),
+          ),
+        ];
+      },
+      errorMessage: 'Unable to find users. Please try again',
+    });
   };
 }
 
