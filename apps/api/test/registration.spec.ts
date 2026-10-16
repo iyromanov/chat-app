@@ -124,7 +124,7 @@ describe('Authentication HTTP boundary (real MongoDB)', () => {
     { username: 'ab' },
     { username: 'usér' },
     { username: 'a'.repeat(31) },
-    { password: 'short' },
+    { password: '123' },
     { password: 'a'.repeat(129) },
   ])('rejects invalid fields %j', async (invalid) => {
     const response = await register({ ...input, ...invalid }).expect(400);
@@ -162,8 +162,12 @@ describe('Authentication HTTP boundary (real MongoDB)', () => {
     await register({
       email: 'min@example.com',
       username: 'min',
-      password: '12345678',
+      password: '1234',
     }).expect(201);
+    await login({
+      email: 'min@example.com',
+      password: '1234',
+    }).expect(200);
     await register({
       email: 'max@example.com',
       username: 'max',
@@ -252,6 +256,7 @@ describe('Authentication HTTP boundary (real MongoDB)', () => {
     { email: 'broken', password: input.password },
     { email: { $ne: null }, password: input.password },
     { email: input.email, password: ['12345678'] },
+    { email: input.email, password: '123' },
     { email: input.email, password: 'a'.repeat(129) },
   ])('validates credentials before Passport reads them: %j', async (body) => {
     const response = await login(body).expect(400);

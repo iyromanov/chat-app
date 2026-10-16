@@ -20,7 +20,7 @@ export interface RegistrationDto {
   /** @pattern ^[A-Za-z0-9_]{3,30}$ */
   username: string;
   /**
-   * @minLength 8
+   * @minLength 4
    * @maxLength 128
    */
   password: string;
@@ -50,7 +50,7 @@ export interface LoginDto {
    */
   email: string;
   /**
-   * @minLength 8
+   * @minLength 4
    * @maxLength 128
    */
   password: string;

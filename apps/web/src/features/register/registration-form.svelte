@@ -113,7 +113,7 @@
         ? 'password-help password-error'
         : 'password-help'}
     />
-    <Helper id="password-help">8–128 characters</Helper>
+    <Helper id="password-help">At least 4 characters</Helper>
     {#if fields.password}
       <Helper id="password-error" color="red" role="alert"
         >{fields.password.join('. ')}</Helper

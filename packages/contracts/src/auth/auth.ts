@@ -10,7 +10,7 @@ export const registrationSchema = z.object({
     ),
   password: z
     .string()
-    .min(8, 'Use at least 8 characters')
+    .min(4, 'Use at least 4 characters')
     .max(128, 'Use at most 128 characters'),
 });
 export const loginSchema = registrationSchema.pick({
